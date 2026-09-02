@@ -1,0 +1,13 @@
+department_a,department_b,compatibility
+Engineering,Traction,COMPATIBLE
+Traction,Engineering,COMPATIBLE
+Engineering,Signalling,CONDITIONAL
+Signalling,Engineering,CONDITIONAL
+Engineering,S&T,COMPATIBLE
+S&T,Engineering,COMPATIBLE
+Traction,Signalling,CONDITIONAL
+Signalling,Traction,CONDITIONAL
+Traction,S&T,COMPATIBLE
+S&T,Traction,COMPATIBLE
+Signalling,S&T,COMPATIBLE
+S&T,Signalling,COMPATIBLE

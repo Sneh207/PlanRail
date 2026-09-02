@@ -27,3 +27,7 @@ backend/venv/
 # Operating System
 .DS_Store
 Thumbs.db
+
+
+# Files
+PlanRail_Delhi_Agra_Dataset.zip
