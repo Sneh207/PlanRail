@@ -1,7 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api.routes import health
+from app.api.routes import (
+    health,
+    dashboard,
+    stations,
+    sections,
+    assets,
+    maintenance,
+    trains,
+    windows,
+    blocks,
+    contracts,
+)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -26,5 +37,15 @@ def read_root():
     return {"message": "PlanRail API Service", "status": "online"}
 
 
-# Include API v1 router namespace
-app.include_router(health.router, prefix=settings.API_V1_STR, tags=["Health"])
+# Include API v1 routers
+prefix = settings.API_V1_STR
+app.include_router(health.router, prefix=prefix, tags=["Health"])
+app.include_router(dashboard.router, prefix=prefix, tags=["Dashboard"])
+app.include_router(stations.router, prefix=prefix, tags=["Stations"])
+app.include_router(sections.router, prefix=prefix, tags=["Sections"])
+app.include_router(assets.router, prefix=prefix, tags=["Assets"])
+app.include_router(maintenance.router, prefix=prefix, tags=["Maintenance"])
+app.include_router(trains.router, prefix=prefix, tags=["Trains"])
+app.include_router(windows.router, prefix=prefix, tags=["Windows & Traffic"])
+app.include_router(blocks.router, prefix=prefix, tags=["Blocks"])
+app.include_router(contracts.router, prefix=prefix, tags=["Advanced Services"])
