@@ -1,0 +1,13 @@
+{
+  "stations": 18,
+  "sections": 17,
+  "trains": 24,
+  "schedule_rows": 432,
+  "assets": 85,
+  "maintenance_requests": 150,
+  "history_events": 300,
+  "crew_teams": 30,
+  "compatibility_rules": 12,
+  "traffic_windows": 408,
+  "maintenance_windows": 408
+}

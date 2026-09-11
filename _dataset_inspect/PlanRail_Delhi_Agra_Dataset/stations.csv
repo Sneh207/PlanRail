@@ -1,0 +1,19 @@
+station_id,station_code,station_name,latitude,longitude,km_from_ndls,source_type,source_note
+ST001,NDLS,New Delhi,28.6431,77.2195,0,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST002,CSB,Shivaji Bridge,28.6339,77.2295,2,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST003,TKJ,Tilak Bridge,28.6295,77.239,3,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST004,NZM,Hazrat Nizamuddin,28.5884,77.25,8,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST005,OKA,Okhla,28.566,77.285,12,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST006,TKD,Tuglakabad,28.505,77.299,18,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST007,FDB,Faridabad,28.4089,77.3178,31,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST008,FDN,Faridabad New Town,28.4,77.314,33,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST009,BVH,Ballabh Garh,28.34,77.315,39,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST010,AST,Asaoti,28.217,77.326,46,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST011,PWL,Palwal,28.1487,77.332,56,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST012,HDL,Hodal,27.895,77.368,88,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST013,KSV,Kosi Kalan,27.792,77.436,95,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST014,CHJ,Chata,27.716,77.508,105,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST015,MTJ,Mathura Jn,27.4924,77.6737,120,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST016,DDDM,Deen Dayal Dham,27.405,77.77,153,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST017,RKM,Raja Ki Mandi,27.205,77.985,191,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
+ST018,AGC,Agra Cantt,27.16,77.999,195,REAL_CORRIDOR_REFERENCE,Station names/order aligned to published Delhi–Agra route references; coordinates are approximate prototype coordinates.
