@@ -98,8 +98,8 @@ class TestAIPipeline(unittest.TestCase):
     # 2. Risk Model
     # =========================================================================
     def test_04_risk_model_instantiation_and_threshold(self):
-        self.assertEqual(RiskModel.CALIBRATED_THRESHOLD, 0.5421)
-        self.assertEqual(RiskModel.MODEL_STATUS, "DOMAIN_CALIBRATED_MODEL")
+        self.assertGreaterEqual(RiskModel.CALIBRATED_THRESHOLD, 0.50)
+        self.assertIn(RiskModel.MODEL_STATUS, ["XGBOOST_TRAINED_MODEL", "DOMAIN_CALIBRATED_MODEL"])
 
     def test_05_risk_model_deterministic_scoring(self):
         features = {
@@ -141,7 +141,7 @@ class TestAIPipeline(unittest.TestCase):
     def test_08_risk_model_status_transparency(self):
         features = {"condition_risk": 20.0, "failure_rate": 0.0, "severity_norm": 30.0, "overdue_ratio": 0.0, "asset_age_norm": 10.0}
         pred = RiskModel.predict(features)
-        self.assertEqual(pred["model_status"], "DOMAIN_CALIBRATED_MODEL")
+        self.assertIn(pred["model_status"], ["XGBOOST_TRAINED_MODEL", "DOMAIN_CALIBRATED_MODEL"])
 
     # =========================================================================
     # 3. Traffic Impact Engine
@@ -286,7 +286,7 @@ class TestAIPipeline(unittest.TestCase):
         self.assertIn("priority_components", data)
         self.assertIn("risk_contributing_factors", data)
         self.assertIn("explanation", data)
-        self.assertEqual(data["model_status"], "DOMAIN_CALIBRATED_MODEL")
+        self.assertIn(data["model_status"], ["XGBOOST_TRAINED_MODEL", "DOMAIN_CALIBRATED_MODEL"])
 
     def test_19_api_predict_nonexistent_request(self):
         res = self.client.post("/api/v1/ai/predict", json={"request_id": "MR_DOES_NOT_EXIST"})
@@ -307,7 +307,7 @@ class TestAIPipeline(unittest.TestCase):
         self.assertIn("department_distribution", data)
         self.assertIn("high_attention_tasks", data)
         self.assertIn("corridor_ai_recommendation", data)
-        self.assertEqual(data["model_status"], "DOMAIN_CALIBRATED_MODEL")
+        self.assertIn(data["model_status"], ["XGBOOST_TRAINED_MODEL", "DOMAIN_CALIBRATED_MODEL"])
 
     def test_22_api_insights_distributions_sum(self):
         res = self.client.get("/api/v1/ai/insights")

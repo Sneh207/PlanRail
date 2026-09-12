@@ -16,17 +16,30 @@ import {
   Network,
   PanelLeftClose,
   PanelLeftOpen,
+  Shield,
   ShieldAlert,
   TrainFront,
+  UserCheck,
   Wrench,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, asRecords, readNumber, readText, type JsonRecord } from "@/lib/api";
+import { api, apiErrorMessage, asRecords, readNumber, readText, type JsonRecord } from "@/lib/api";
+import {
+  UserRole,
+  ROLE_CONFIGS,
+  getSessionRole,
+  getSessionUsername,
+  isSessionActive,
+  setSession,
+  clearSession,
+  isRouteAllowed,
+} from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export const dashboardQuery = { queryKey: ["planrail", "dashboard"], queryFn: api.dashboard };
@@ -36,79 +49,156 @@ export const maintenanceFeedQuery = { queryKey: ["planrail", "maintenance", "all
 
 type NavItem = { label: string; to: string; icon: typeof LayoutDashboard };
 
-const navItems: NavItem[] = [
-  { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
-  { label: "Railway Network", to: "/network", icon: Network },
-  { label: "Maintenance", to: "/maintenance", icon: Wrench },
-  { label: "Trains", to: "/trains", icon: TrainFront },
-  { label: "Block Planning", to: "/blocks", icon: Boxes },
-  { label: "AI Insights", to: "/insights", icon: BrainCircuit },
-];
+function getNavItemsForRole(role: UserRole): NavItem[] {
+  if (role === "MAINTENANCE") {
+    return [
+      { label: "Maintenance Dashboard", to: "/maintenance-dashboard", icon: LayoutDashboard },
+      { label: "Work Queue", to: "/maintenance", icon: Wrench },
+      { label: "Assets & Network", to: "/network", icon: Network },
+      { label: "Trains & Traffic", to: "/trains", icon: TrainFront },
+      { label: "AI Risk Insights", to: "/insights", icon: BrainCircuit },
+    ];
+  }
+  if (role === "ADMIN") {
+    return [
+      { label: "Admin Dashboard", to: "/admin-dashboard", icon: Shield },
+      { label: "Infrastructure", to: "/network", icon: Network },
+      { label: "Maintenance Overview", to: "/maintenance", icon: Wrench },
+      { label: "Train & Freight Fleet", to: "/trains", icon: TrainFront },
+      { label: "AI System Insights", to: "/insights", icon: BrainCircuit },
+    ];
+  }
+  return [
+    { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+    { label: "Railway Network", to: "/network", icon: Network },
+    { label: "Maintenance", to: "/maintenance", icon: Wrench },
+    { label: "Trains", to: "/trains", icon: TrainFront },
+    { label: "Block Planning", to: "/blocks", icon: Boxes },
+    { label: "AI Insights", to: "/insights", icon: BrainCircuit },
+  ];
+}
 
 export function DemoLogin() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("demo.operator");
+  const [selectedRole, setSelectedRole] = useState<UserRole>("CONTROLLER");
+  const [username, setUsername] = useState(ROLE_CONFIGS["CONTROLLER"].defaultUsername);
   const [password, setPassword] = useState("");
+
+  function handleRoleChange(role: UserRole) {
+    setSelectedRole(role);
+    setUsername(ROLE_CONFIGS[role].defaultUsername);
+  }
 
   function enterDashboard(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    sessionStorage.setItem("planrail-demo-session", "active");
-    navigate({ to: "/dashboard" });
+    setSession(selectedRole, username);
+    const dest = ROLE_CONFIGS[selectedRole].dashboardPath;
+    navigate({ to: dest });
   }
+
+  const activeConfig = ROLE_CONFIGS[selectedRole];
 
   return (
     <main className="min-h-screen bg-rail-paper text-rail-ink">
-      <section className="grid min-h-screen lg:grid-cols-[minmax(0,42%)_1fr]">
+      <section className="grid min-h-screen lg:grid-cols-[minmax(0,40%)_1fr]">
         <div className="relative flex min-h-[520px] flex-col justify-between overflow-hidden bg-rail-ink px-7 py-8 text-rail-paper sm:px-10 sm:py-10">
           <div className="flex items-center gap-3">
             <span className="size-2.5 rounded-full bg-rail-blue" />
             <span className="font-mono text-[11px] tracking-[0.22em] text-rail-paper/70">
-              PLANRAIL // CONTROL
+              PLANRAIL // CONTROL &amp; GOVERNANCE
             </span>
           </div>
-          <div className="relative mt-20 lg:mt-0">
+          <div className="relative mt-16 lg:mt-0">
             <div className="mb-4 font-mono text-[11px] tracking-[0.2em] text-rail-blue">
-              SIGNAL BOX · FIRST LIGHT
+              SIH 2026 · RAILWAY DECISION SUPPORT
             </div>
-            <h1 className="max-w-xl text-5xl font-extrabold leading-[0.95] tracking-tight sm:text-6xl">
+            <h1 className="max-w-xl text-4xl font-extrabold leading-[0.98] tracking-tight sm:text-5xl">
               Delhi —
               <br />
               Agra
               <br />
               Corridor
             </h1>
-            <p className="mt-6 max-w-[34ch] text-sm leading-relaxed text-rail-paper/60">
-              Corridor operations surface for the Delhi–Agra main line. Blocks, maintenance, and
-              risk — read at a glance.
+            <p className="mt-5 max-w-[34ch] text-sm leading-relaxed text-rail-paper/60">
+              AI-Powered Automatic Block Planning to Maximize Asset Availability for Train Operations on Indian Railways.
             </p>
           </div>
-          <div className="mt-20 flex max-w-sm justify-between font-mono text-[10px] tracking-[0.18em] text-rail-paper/40">
+          <div className="mt-16 flex max-w-sm justify-between font-mono text-[10px] tracking-[0.18em] text-rail-paper/40">
             <span>DELHI</span>
             <span>AGRA</span>
-            <span>PROTOTYPE</span>
+            <span>195 KM CORRIDOR</span>
           </div>
           <div className="absolute bottom-24 left-10 h-40 w-px bg-rail-blue/40" />
           <div className="rail-pulse absolute left-[10.42rem] top-1/2 size-2 rounded-full bg-rail-blue" />
         </div>
 
-        <div className="flex items-center bg-rail-paper px-6 py-12 sm:px-12">
-          <form className="mx-auto w-full max-w-sm" onSubmit={enterDashboard}>
-            <div className="mb-2 font-mono text-[11px] tracking-[0.2em] text-rail-ink/45">
-              AUTH · OPERATOR
+        <div className="flex items-center bg-rail-paper px-6 py-10 sm:px-12">
+          <form className="mx-auto w-full max-w-md" onSubmit={enterDashboard}>
+            <div className="mb-1 font-mono text-[11px] tracking-[0.2em] text-rail-ink/45">
+              PLANRAIL AUTHENTICATION
             </div>
-            <h2 className="text-2xl font-bold tracking-tight">Operator sign-in</h2>
-            <p className="mt-2 text-sm text-rail-ink/55">
-              Enter the PlanRail decision-support workspace.
+            <h2 className="text-2xl font-bold tracking-tight">Select your role</h2>
+            <p className="mt-1 text-xs text-rail-ink/55">
+              Choose an operational persona to enter the decision-support workspace.
             </p>
-            <div className="mt-8 space-y-4">
+
+            {/* 3 Role Selection Cards */}
+            <div className="mt-6 space-y-2.5">
+              {(["CONTROLLER", "MAINTENANCE", "ADMIN"] as UserRole[]).map((r) => {
+                const cfg = ROLE_CONFIGS[r];
+                const isSelected = selectedRole === r;
+                return (
+                  <div
+                    key={r}
+                    onClick={() => handleRoleChange(r)}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all",
+                      isSelected
+                        ? "border-rail-blue bg-rail-panel shadow-sm ring-2 ring-rail-blue/25"
+                        : "border-rail-ink/10 bg-rail-panel/50 hover:border-rail-ink/20 hover:bg-rail-panel",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg text-xs font-bold",
+                        isSelected
+                          ? "bg-rail-blue text-rail-paper"
+                          : "bg-rail-ink/5 text-rail-ink/50",
+                      )}
+                    >
+                      {cfg.avatarCode}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-rail-ink">{cfg.title}</span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "font-mono text-[9px]",
+                            isSelected ? "border-rail-blue text-rail-blue" : "border-rail-ink/20 text-rail-ink/40",
+                          )}
+                        >
+                          {cfg.subtitle}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-snug text-rail-ink/65">
+                        {cfg.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 space-y-3.5">
               <label className="block">
                 <span className="font-mono text-[10px] tracking-[0.15em] text-rail-ink/45">
-                  USERNAME
+                  USERNAME ({activeConfig.title.toUpperCase()})
                 </span>
                 <Input
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  className="mt-1.5 h-11 border-rail-ink/10 bg-rail-panel text-rail-ink focus-visible:ring-rail-blue/40"
+                  className="mt-1.5 h-10 border-rail-ink/10 bg-rail-panel font-mono text-xs text-rail-ink focus-visible:ring-rail-blue/40"
                   placeholder="username"
                 />
               </label>
@@ -120,20 +210,20 @@ export function DemoLogin() {
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="mt-1.5 h-11 border-rail-ink/10 bg-rail-panel text-rail-ink focus-visible:ring-rail-blue/40"
+                  className="mt-1.5 h-10 border-rail-ink/10 bg-rail-panel text-xs text-rail-ink focus-visible:ring-rail-blue/40"
                   placeholder="••••••••"
                 />
               </label>
             </div>
+
             <Button
               type="submit"
-              className="mt-7 h-12 w-full rounded-lg bg-rail-blue text-rail-paper hover:bg-rail-blue/90"
+              className="mt-6 h-11 w-full rounded-lg bg-rail-blue text-xs font-semibold text-rail-paper hover:bg-rail-blue/90"
             >
-              Enter Dashboard
-              <span className="size-1.5 rounded-full bg-rail-paper/80" />
+              Sign In as {activeConfig.title} &rarr;
             </Button>
-            <p className="mt-4 font-mono text-[10px] tracking-[0.12em] text-rail-ink/35">
-              LOCAL PROTOTYPE · READ-ONLY DECISION SUPPORT
+            <p className="mt-3 text-center font-mono text-[10px] tracking-[0.12em] text-rail-ink/35">
+              LOCAL SIH PROTOTYPE · ROLE-BASED ACCESS
             </p>
           </form>
         </div>
@@ -148,6 +238,32 @@ export function PlanRailShell({ children }: { children: ReactNode }) {
   const [railOpen, setRailOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
 
+  const [currentRole, setCurrentRole] = useState<UserRole>("CONTROLLER");
+  const [sessionUsername, setSessionUsername] = useState<string>("controller.delhi");
+  const [isClientReady, setIsClientReady] = useState(false);
+
+  // Sync role and enforce route protection & active session on client
+  useEffect(() => {
+    setIsClientReady(true);
+    if (!isSessionActive()) {
+      navigate({ to: "/" });
+      return;
+    }
+
+    const role = getSessionRole();
+    const uname = getSessionUsername();
+    setCurrentRole(role);
+    setSessionUsername(uname);
+
+    if (!isRouteAllowed(location.pathname, role)) {
+      const dest = ROLE_CONFIGS[role]?.dashboardPath || "/dashboard";
+      navigate({ to: dest });
+    }
+  }, [location.pathname, navigate]);
+
+  const roleConfig = ROLE_CONFIGS[currentRole];
+  const navItems = getNavItemsForRole(currentRole);
+
   const healthQuery = useQuery({
     queryKey: ["planrail", "health"],
     queryFn: api.health,
@@ -157,8 +273,21 @@ export function PlanRailShell({ children }: { children: ReactNode }) {
   const isOnline = healthQuery.isSuccess;
 
   function signOut() {
-    sessionStorage.removeItem("planrail-demo-session");
+    clearSession();
     navigate({ to: "/" });
+  }
+
+  if (isClientReady && !isSessionActive()) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-rail-paper p-6 text-rail-ink">
+        <div className="text-center">
+          <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-rail-blue/10 text-rail-blue">
+            <LogOut className="size-5 animate-pulse" />
+          </div>
+          <p className="mt-3 font-mono text-xs text-rail-ink/50">Redirecting to login…</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -234,14 +363,13 @@ export function PlanRailShell({ children }: { children: ReactNode }) {
               </div>
             )}
             <Button
-              variant="ghost"
-              size="icon"
+              variant="outline"
               onClick={signOut}
               title="Exit session"
-              className="mt-3 w-full text-rail-paper/55 hover:bg-rail-paper/10 hover:text-rail-paper"
+              className="mt-3 flex h-9 w-full items-center justify-center gap-2 border-rail-paper/15 bg-transparent px-3 text-xs font-medium text-rail-paper/70 hover:bg-rail-paper/10 hover:text-rail-paper"
             >
-              <LogOut />
-              {!railCollapsed && <span className="text-xs">Exit session</span>}
+              <LogOut className="size-4 shrink-0" />
+              {!railCollapsed && <span>Exit session</span>}
             </Button>
           </div>
         </aside>
@@ -284,7 +412,7 @@ export function PlanRailShell({ children }: { children: ReactNode }) {
                 </span>
               </div>
               <span className="text-sm font-semibold">
-                {navItems.find((item) => item.to === location.pathname)?.label ?? "Operations"}
+                {navItems.find((item) => item.to === location.pathname)?.label ?? "Workspace"}
               </span>
             </div>
             <div className="flex items-center gap-3 sm:gap-4">
@@ -299,16 +427,48 @@ export function PlanRailShell({ children }: { children: ReactNode }) {
                   </>
                 )}
               </span>
+
+              {/* Role Indicator Badge */}
               <div className="flex items-center gap-2 border-l border-rail-ink/10 pl-3 sm:gap-2.5 sm:pl-4">
-                <div className="grid size-8 place-items-center rounded-full bg-rail-blue/15 text-xs font-bold text-rail-blue">
-                  OP
+                <div
+                  className={cn(
+                    "grid size-8 place-items-center rounded-full text-xs font-bold",
+                    roleConfig?.badgeTone === "amber" && "bg-rail-amber/15 text-rail-amber",
+                    roleConfig?.badgeTone === "green" && "bg-rail-green/15 text-rail-green",
+                    roleConfig?.badgeTone === "blue" && "bg-rail-blue/15 text-rail-blue",
+                  )}
+                >
+                  {roleConfig?.avatarCode ?? "OP"}
                 </div>
                 <div className="hidden leading-tight sm:block">
-                  <div className="text-xs font-semibold">Controller</div>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold">
+                    <span>{roleConfig?.title ?? "Operator"}</span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "px-1 py-0 font-mono text-[9px]",
+                        roleConfig?.badgeTone === "amber" && "border-rail-amber/30 text-rail-amber",
+                        roleConfig?.badgeTone === "green" && "border-rail-green/30 text-rail-green",
+                        roleConfig?.badgeTone === "blue" && "border-rail-blue/30 text-rail-blue",
+                      )}
+                    >
+                      {roleConfig?.badgeLabel ?? "OPERATOR"}
+                    </Badge>
+                  </div>
                   <div className="font-mono text-[9px] tracking-[0.1em] text-rail-ink/40">
-                    SHIFT A
+                    {sessionUsername}
                   </div>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={signOut}
+                  title="Sign out of PlanRail"
+                  className="ml-1 h-8 gap-1.5 border-rail-ink/15 px-2.5 text-xs font-medium text-rail-ink/75 hover:bg-rail-red/10 hover:border-rail-red/30 hover:text-rail-red"
+                >
+                  <LogOut className="size-3.5" />
+                  <span className="hidden md:inline">Sign out</span>
+                </Button>
               </div>
             </div>
           </header>

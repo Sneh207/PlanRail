@@ -10,16 +10,23 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminDashboardRouteImport } from './routes/admin-dashboard'
 import { Route as BlocksRouteImport } from './routes/blocks'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as MaintenanceRouteImport } from './routes/maintenance'
+import { Route as MaintenanceDashboardRouteImport } from './routes/maintenance-dashboard'
 import { Route as NetworkRouteImport } from './routes/network'
 import { Route as TrainsRouteImport } from './routes/trains'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/admin-dashboard',
+  path: '/admin-dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlocksRoute = BlocksRouteImport.update({
@@ -42,6 +49,11 @@ const MaintenanceRoute = MaintenanceRouteImport.update({
   path: '/maintenance',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MaintenanceDashboardRoute = MaintenanceDashboardRouteImport.update({
+  id: '/maintenance-dashboard',
+  path: '/maintenance-dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NetworkRoute = NetworkRouteImport.update({
   id: '/network',
   path: '/network',
@@ -55,29 +67,35 @@ const TrainsRoute = TrainsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin-dashboard': typeof AdminDashboardRoute
   '/blocks': typeof BlocksRoute
   '/dashboard': typeof DashboardRoute
   '/insights': typeof InsightsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/maintenance-dashboard': typeof MaintenanceDashboardRoute
   '/network': typeof NetworkRoute
   '/trains': typeof TrainsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin-dashboard': typeof AdminDashboardRoute
   '/blocks': typeof BlocksRoute
   '/dashboard': typeof DashboardRoute
   '/insights': typeof InsightsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/maintenance-dashboard': typeof MaintenanceDashboardRoute
   '/network': typeof NetworkRoute
   '/trains': typeof TrainsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin-dashboard': typeof AdminDashboardRoute
   '/blocks': typeof BlocksRoute
   '/dashboard': typeof DashboardRoute
   '/insights': typeof InsightsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/maintenance-dashboard': typeof MaintenanceDashboardRoute
   '/network': typeof NetworkRoute
   '/trains': typeof TrainsRoute
 }
@@ -85,38 +103,46 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin-dashboard'
     | '/blocks'
     | '/dashboard'
     | '/insights'
     | '/maintenance'
+    | '/maintenance-dashboard'
     | '/network'
     | '/trains'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin-dashboard'
     | '/blocks'
     | '/dashboard'
     | '/insights'
     | '/maintenance'
+    | '/maintenance-dashboard'
     | '/network'
     | '/trains'
   id:
     | '__root__'
     | '/'
+    | '/admin-dashboard'
     | '/blocks'
     | '/dashboard'
     | '/insights'
     | '/maintenance'
+    | '/maintenance-dashboard'
     | '/network'
     | '/trains'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminDashboardRoute: typeof AdminDashboardRoute
   BlocksRoute: typeof BlocksRoute
   DashboardRoute: typeof DashboardRoute
   InsightsRoute: typeof InsightsRoute
   MaintenanceRoute: typeof MaintenanceRoute
+  MaintenanceDashboardRoute: typeof MaintenanceDashboardRoute
   NetworkRoute: typeof NetworkRoute
   TrainsRoute: typeof TrainsRoute
 }
@@ -128,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin-dashboard': {
+      id: '/admin-dashboard'
+      path: '/admin-dashboard'
+      fullPath: '/admin-dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blocks': {
@@ -158,6 +191,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MaintenanceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/maintenance-dashboard': {
+      id: '/maintenance-dashboard'
+      path: '/maintenance-dashboard'
+      fullPath: '/maintenance-dashboard'
+      preLoaderRoute: typeof MaintenanceDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/network': {
       id: '/network'
       path: '/network'
@@ -177,10 +217,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminDashboardRoute: AdminDashboardRoute,
   BlocksRoute: BlocksRoute,
   DashboardRoute: DashboardRoute,
   InsightsRoute: InsightsRoute,
   MaintenanceRoute: MaintenanceRoute,
+  MaintenanceDashboardRoute: MaintenanceDashboardRoute,
   NetworkRoute: NetworkRoute,
   TrainsRoute: TrainsRoute,
 }

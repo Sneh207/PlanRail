@@ -1,1 +1,0 @@
-import{a as e,t}from"./planrail-CeQnJ0J8.js";import{x as n}from"./index-BZSkkdK2.js";var r=n(),i=()=>(0,r.jsx)(e,{children:(0,r.jsx)(t,{})});export{i as component};

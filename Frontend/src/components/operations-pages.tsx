@@ -1,6 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { OptimizationGenerateResponse } from "@/lib/types";
+import type {
+  OptimizationGenerateResponse,
+  SimulationRunRequest,
+  SimulationRunResponse,
+} from "@/lib/types";
 import {
+  AlertCircle,
+  ArrowRight,
   CalendarClock,
   Check,
   ChevronRight,
@@ -9,8 +15,11 @@ import {
   MapPin,
   PanelRight,
   RefreshCw,
+  RotateCcw,
   Search,
+  SlidersHorizontal,
   Sparkles,
+  TrendingUp,
   Wrench,
   X,
   BrainCircuit,
@@ -658,6 +667,18 @@ export function BlockPlanningPage() {
   const [optimizationError, setOptimizationError] = useState<string | null>(null);
   const [optimizationPending, setOptimizationPending] = useState(false);
   const [targetDate, setTargetDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  // What-If Simulation State
+  const [simulationScenario, setSimulationScenario] = useState<
+    "TRAFFIC_PLUS_20" | "EMERGENCY_MAINTENANCE" | "REMOVE_MAINTENANCE_WINDOW"
+  >("TRAFFIC_PLUS_20");
+  const [simulationTargetDate, setSimulationTargetDate] = useState("2026-09-15");
+  const [simulationRequestId, setSimulationRequestId] = useState("REQ00001");
+  const [simulationWindowId, setSimulationWindowId] = useState("MW00001");
+  const [simulationResult, setSimulationResult] = useState<SimulationRunResponse | null>(null);
+  const [simulationPending, setSimulationPending] = useState(false);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
+
   // Demo-only approval state: no approval API exists yet, so decisions are
   // kept locally and clearly labelled in the UI.
   const [demoDecisions, setDemoDecisions] = useState<Record<string, BlockDecision>>({});
@@ -700,14 +721,41 @@ export function BlockPlanningPage() {
     }
   }
 
+  async function runWhatIfSimulation() {
+    setSimulationError(null);
+    setSimulationPending(true);
+    try {
+      const payload: SimulationRunRequest = {
+        scenario_type: simulationScenario,
+        target_date: simulationTargetDate,
+        request_id: simulationScenario === "EMERGENCY_MAINTENANCE" ? simulationRequestId : null,
+        window_id: simulationScenario === "REMOVE_MAINTENANCE_WINDOW" ? simulationWindowId : null,
+      };
+      const response = await api.runSimulation(payload);
+      if (response.status >= 200 && response.status < 300 && response.data) {
+        setSimulationResult(response.data);
+      } else {
+        setSimulationError(
+          apiErrorMessage(response.data, "The simulation endpoint did not return valid metrics."),
+        );
+      }
+    } catch (err) {
+      setSimulationError(apiErrorMessage(err, "The What-If simulation service could not be reached"));
+    } finally {
+      setSimulationPending(false);
+    }
+  }
+
   return (
     <PlanRailShell>
-      <div className="space-y-5">
+      <div className="space-y-6">
         <PageIntro
           eyebrow="BLOCK CONTROL — DELHI–AGRA"
-          title="Block planning"
-          description="Review existing corridor blocks, corridor occupation timeline, and generate optimal maintenance windows."
+          title="Block planning & What-If simulation"
+          description="Review corridor blocks, generate optimal maintenance possessions with CP-SAT, and simulate external operational shocks."
         />
+
+        {/* Top Control Bar: Optimizer & Quick Actions */}
         <div className="flex flex-col gap-3 rounded-[14px] bg-rail-panel p-4 shadow-rail ring-1 ring-rail-ink/8 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-4">
             <div>
@@ -736,7 +784,288 @@ export function BlockPlanningPage() {
             <Sparkles className="size-4" /> {optimizationPending ? "Solving CP-SAT Model…" : "Generate Optimal Plan"}
           </Button>
         </div>
+
         {optimizationError && <ErrorState message={optimizationError} />}
+
+        {/* What-If Simulation Engine Section */}
+        <section className="rounded-[14px] border border-rail-ink/10 bg-rail-panel p-5 shadow-rail">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rail-ink/8 pb-4">
+            <div>
+              <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.15em] text-rail-blue">
+                <SlidersHorizontal className="size-3.5" />
+                WHAT-IF SIMULATION ENGINE
+              </div>
+              <h3 className="mt-1 text-base font-bold text-rail-ink">
+                Scenario & Sensitivity Analysis
+              </h3>
+              <p className="mt-0.5 text-xs text-rail-ink/65">
+                Non-destructive simulation of corridor disruptions and capacity adjustments.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {simulationResult && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSimulationResult(null)}
+                  className="h-8 gap-1.5 border-rail-ink/15 text-xs"
+                >
+                  <RotateCcw className="size-3.5" /> Reset to Baseline
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={() => void runWhatIfSimulation()}
+                disabled={simulationPending}
+                className="h-8 gap-1.5 bg-rail-ink text-xs font-medium text-rail-paper hover:bg-rail-ink/90"
+              >
+                <TrendingUp className="size-3.5" />
+                {simulationPending ? "Simulating Scenario…" : "Run Simulation"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Scenario Selection Grid */}
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                id: "TRAFFIC_PLUS_20" as const,
+                title: "Traffic +20%",
+                desc: "Simulate a 20% surge in train traffic density across the Delhi–Agra corridor.",
+              },
+              {
+                id: "EMERGENCY_MAINTENANCE" as const,
+                title: "Emergency Maintenance",
+                desc: "Inject an urgent maintenance possession request and test dynamic reallocation.",
+              },
+              {
+                id: "REMOVE_MAINTENANCE_WINDOW" as const,
+                title: "Remove Maintenance Window",
+                desc: "Withdraw an operational track window and evaluate optimizer reassignment.",
+              },
+            ].map((sc) => {
+              const active = simulationScenario === sc.id;
+              return (
+                <div
+                  key={sc.id}
+                  onClick={() => setSimulationScenario(sc.id)}
+                  className={cn(
+                    "cursor-pointer rounded-xl border p-3 transition-all",
+                    active
+                      ? "border-rail-blue bg-rail-paper shadow-sm ring-2 ring-rail-blue/20"
+                      : "border-rail-ink/10 bg-rail-paper/40 hover:bg-rail-paper/80",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-rail-ink">{sc.title}</span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "font-mono text-[9px]",
+                        active ? "border-rail-blue text-rail-blue" : "border-rail-ink/20 text-rail-ink/40",
+                      )}
+                    >
+                      {active ? "ACTIVE" : "SELECT"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-rail-ink/65">{sc.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Scenario Parameters */}
+          <div className="mt-4 flex flex-wrap items-center gap-4 rounded-lg bg-rail-paper p-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-rail-ink/50">TARGET DATE:</span>
+              <input
+                type="date"
+                value={simulationTargetDate}
+                onChange={(e) => setSimulationTargetDate(e.target.value)}
+                className="h-7 rounded border border-rail-ink/15 bg-rail-panel px-2 font-mono text-xs"
+              />
+            </div>
+            {simulationScenario === "EMERGENCY_MAINTENANCE" && (
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-rail-ink/50">REQUEST ID:</span>
+                <input
+                  type="text"
+                  value={simulationRequestId}
+                  onChange={(e) => setSimulationRequestId(e.target.value)}
+                  placeholder="e.g. REQ00001"
+                  className="h-7 w-28 rounded border border-rail-ink/15 bg-rail-panel px-2 font-mono text-xs"
+                />
+              </div>
+            )}
+            {simulationScenario === "REMOVE_MAINTENANCE_WINDOW" && (
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-rail-ink/50">WINDOW ID:</span>
+                <input
+                  type="text"
+                  value={simulationWindowId}
+                  onChange={(e) => setSimulationWindowId(e.target.value)}
+                  placeholder="e.g. MW00001"
+                  className="h-7 w-28 rounded border border-rail-ink/15 bg-rail-panel px-2 font-mono text-xs"
+                />
+              </div>
+            )}
+          </div>
+
+          {simulationError && (
+            <div className="mt-3">
+              <ErrorState message={simulationError} />
+            </div>
+          )}
+
+          {/* Simulation Results Comparative Display */}
+          {simulationResult && (
+            <div className="mt-4 space-y-4 rounded-xl border border-rail-blue/20 bg-rail-paper p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rail-ink/8 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="rail-pulse size-2 rounded-full bg-rail-blue" />
+                  <span className="font-mono text-xs font-bold text-rail-blue">
+                    {simulationResult.simulation_id}
+                  </span>
+                  <Badge variant="outline" className="font-mono text-[9px]">
+                    {simulationResult.scenario_type}
+                  </Badge>
+                </div>
+                <span className="font-mono text-[10px] text-rail-ink/40">
+                  Target: {simulationResult.target_date}
+                </span>
+              </div>
+
+              {/* Metrics Comparative Grid */}
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="rounded-lg border border-rail-ink/8 bg-rail-panel p-3">
+                  <div className="font-mono text-[9px] tracking-wider text-rail-ink/45">
+                    SCHEDULED TASKS
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-rail-ink">
+                      {simulationResult.scenario.scheduled_tasks}
+                    </span>
+                    <span className="text-xs text-rail-ink/40">
+                      vs {simulationResult.baseline.scheduled_tasks} baseline
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "mt-2 font-mono text-[9px]",
+                      simulationResult.difference.scheduled_tasks_delta >= 0
+                        ? "border-rail-green/30 text-rail-green"
+                        : "border-rail-red/30 text-rail-red",
+                    )}
+                  >
+                    {simulationResult.difference.scheduled_tasks_delta >= 0 ? "+" : ""}
+                    {simulationResult.difference.scheduled_tasks_delta} delta
+                  </Badge>
+                </div>
+
+                <div className="rounded-lg border border-rail-ink/8 bg-rail-panel p-3">
+                  <div className="font-mono text-[9px] tracking-wider text-rail-ink/45">
+                    TOTAL DURATION
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-rail-ink">
+                      {simulationResult.scenario.total_scheduled_duration_hours.toFixed(1)}h
+                    </span>
+                    <span className="text-xs text-rail-ink/40">
+                      vs {simulationResult.baseline.total_scheduled_duration_hours.toFixed(1)}h
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="mt-2 border-rail-ink/20 font-mono text-[9px] text-rail-ink/60"
+                  >
+                    {simulationResult.difference.scheduled_duration_delta_hours >= 0 ? "+" : ""}
+                    {simulationResult.difference.scheduled_duration_delta_hours.toFixed(1)}h delta
+                  </Badge>
+                </div>
+
+                <div className="rounded-lg border border-rail-ink/8 bg-rail-panel p-3">
+                  <div className="font-mono text-[9px] tracking-wider text-rail-ink/45">
+                    TRAIN EXPOSURE
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-rail-ink">
+                      {simulationResult.scenario.total_expected_train_exposure}
+                    </span>
+                    <span className="text-xs text-rail-ink/40">
+                      vs {simulationResult.baseline.total_expected_train_exposure}
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="mt-2 border-rail-ink/20 font-mono text-[9px] text-rail-ink/60"
+                  >
+                    {simulationResult.difference.train_exposure_delta >= 0 ? "+" : ""}
+                    {simulationResult.difference.train_exposure_delta} exposure delta
+                  </Badge>
+                </div>
+
+                <div className="rounded-lg border border-rail-ink/8 bg-rail-panel p-3">
+                  <div className="font-mono text-[9px] tracking-wider text-rail-ink/45">
+                    UNSCHEDULED TASKS
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-rail-ink">
+                      {simulationResult.scenario.unscheduled_tasks}
+                    </span>
+                    <span className="text-xs text-rail-ink/40">
+                      vs {simulationResult.baseline.unscheduled_tasks}
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "mt-2 font-mono text-[9px]",
+                      simulationResult.scenario.unscheduled_tasks === 0
+                        ? "border-rail-green/30 text-rail-green"
+                        : "border-rail-amber/30 text-rail-amber",
+                    )}
+                  >
+                    {simulationResult.scenario.unscheduled_tasks === 0 ? "ALL ACCOMMODATED" : "CAPACITY CONSTRAINED"}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Task Reallocations & Unscheduled Chips */}
+              {(simulationResult.moved_tasks.length > 0 ||
+                simulationResult.unscheduled_tasks_after_simulation.length > 0 ||
+                simulationResult.newly_scheduled_tasks.length > 0) && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {simulationResult.newly_scheduled_tasks.map((id) => (
+                    <Badge key={id} className="bg-rail-green/15 text-rail-green font-mono text-[10px]">
+                      + NEW: {id}
+                    </Badge>
+                  ))}
+                  {simulationResult.moved_tasks.map((id) => (
+                    <Badge key={id} className="bg-rail-blue/15 text-rail-blue font-mono text-[10px]">
+                      ↔ MOVED: {id}
+                    </Badge>
+                  ))}
+                  {simulationResult.unscheduled_tasks_after_simulation.map((id) => (
+                    <Badge key={id} className="bg-rail-red/15 text-rail-red font-mono text-[10px]">
+                      ✕ UNSCHEDULED: {id}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Explanation Note */}
+              <div className="rounded-lg bg-rail-panel p-3 text-xs leading-relaxed text-rail-ink/80">
+                <div className="font-mono text-[10px] tracking-wider text-rail-ink/40 mb-1">
+                  EXPLANATION &amp; DECISION IMPACT
+                </div>
+                {simulationResult.explanation}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Existing Blocks Feed */}
         {error ? (
           <ErrorState
             message={apiErrorMessage(error, "The block feed could not be loaded")}
@@ -798,6 +1127,7 @@ export function BlockPlanningPage() {
           </div>
         )}
       </div>
+
       <Dialog open={optimizationOpen} onOpenChange={setOptimizationOpen}>
         <DialogContent className="border-rail-ink/10 bg-rail-panel text-rail-ink sm:max-w-md">
           <DialogHeader>

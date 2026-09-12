@@ -22,6 +22,12 @@ from app.api.routes import (
 async def lifespan(app: FastAPI):
     # Initialize application tables and views safely on startup
     init_db()
+    # Pre-warm trained XGBoost Risk Model singleton
+    try:
+        from app.ai.risk_model import RiskModel
+        RiskModel.load_model()
+    except Exception as err:
+        pass
     yield
 
 

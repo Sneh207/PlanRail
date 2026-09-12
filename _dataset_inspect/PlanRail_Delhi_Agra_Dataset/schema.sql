@@ -50,3 +50,15 @@ CREATE TABLE maintenance_windows (
  start_time TEXT, end_time TEXT, expected_train_count INT,
  traffic_level TEXT, is_feasible BOOLEAN, window_reason TEXT
 );
+CREATE TABLE freight_train_movements (
+ freight_train_id TEXT PRIMARY KEY, movement_date DATE NOT NULL,
+ origin_station_code TEXT NOT NULL, destination_station_code TEXT NOT NULL,
+ commodity TEXT NOT NULL, load_tonnes DOUBLE PRECISION NOT NULL,
+ planned_entry_time TEXT NOT NULL, planned_exit_time TEXT NOT NULL,
+ traffic_priority TEXT NOT NULL, corridor TEXT NOT NULL DEFAULT 'Delhi-Agra',
+ data_status TEXT NOT NULL DEFAULT 'SIMULATED_BY_PLANRAIL',
+ source_basis TEXT NOT NULL, planning_use TEXT NOT NULL, simulation_note TEXT NOT NULL,
+ reference_1 TEXT, reference_1_url TEXT, reference_2 TEXT, reference_2_url TEXT,
+ reference_3 TEXT, reference_3_url TEXT, reference_4 TEXT, reference_4_url TEXT
+);
+

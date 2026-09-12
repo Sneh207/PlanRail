@@ -63,6 +63,7 @@ EXPECTED_COUNTS = {
     "maintenance_compatibility": 12,
     "traffic_windows": 408,
     "maintenance_windows": 408,
+    "freight_train_movements": 36,
 }
 
 VALID_COMPATIBILITY_VALUES = {"COMPATIBLE", "CONDITIONAL", "INCOMPATIBLE"}
@@ -344,7 +345,20 @@ def validate_all(dataset_dir: Path) -> dict[str, list[dict]]:
     check_fk(mw_rows, "section_id", section_ids, "maintenance_windows.csv", "railway_sections.section_id")
     for r in mw_rows:
         parse_bool(r["is_feasible"])
-    print(f"  maintenance_windows.csv  OK ({len(mw_rows)} rows)")
+    # -- freight_train_movements (optional / simulated) --
+    freight_rows = []
+    freight_csv = dataset_dir / "PlanRail_Delhi_Agra_Freight_Trains_with_References.csv"
+    if not freight_csv.is_file():
+        freight_csv = dataset_dir.parent / "PlanRail_Delhi_Agra_Freight_Trains_with_References.csv"
+    if freight_csv.is_file():
+        freight_rows = read_csv(freight_csv)
+        require_columns(
+            freight_rows,
+            ["freight_train_id", "movement_date", "origin_station_code", "destination_station_code", "commodity", "load_tonnes"],
+            "PlanRail_Delhi_Agra_Freight_Trains_with_References.csv",
+        )
+        check_unique(freight_rows, "freight_train_id", "PlanRail_Delhi_Agra_Freight_Trains_with_References.csv")
+        print(f"  PlanRail_Delhi_Agra_Freight_Trains_with_References.csv OK ({len(freight_rows)} rows)")
 
     print("\n  [OK] All pre-import validations passed.\n")
 
@@ -360,6 +374,7 @@ def validate_all(dataset_dir: Path) -> dict[str, list[dict]]:
         "task_compatibility": compat_rows,
         "traffic_windows": tw_rows,
         "maintenance_windows": mw_rows,
+        "freight_train_movements": freight_rows,
     }
 
 
@@ -851,6 +866,114 @@ def load_maintenance_windows(conn, rows: list[dict]) -> tuple[int, int, int]:
     return attempted, inserted, updated
 
 
+def load_freight_train_movements(conn, rows: list[dict]) -> tuple[int, int, int]:
+    """Load simulated freight trains CSV -> freight_train_movements table."""
+    if not rows:
+        return 0, 0, 0
+    # Ensure table exists
+    conn.execute(text(
+        """
+        CREATE TABLE IF NOT EXISTS freight_train_movements (
+            freight_train_id TEXT PRIMARY KEY,
+            movement_date DATE NOT NULL,
+            origin_station_code TEXT NOT NULL,
+            destination_station_code TEXT NOT NULL,
+            commodity TEXT NOT NULL,
+            load_tonnes DOUBLE PRECISION NOT NULL,
+            planned_entry_time TEXT NOT NULL,
+            planned_exit_time TEXT NOT NULL,
+            traffic_priority TEXT NOT NULL,
+            corridor TEXT NOT NULL DEFAULT 'Delhi-Agra',
+            data_status TEXT NOT NULL DEFAULT 'SIMULATED_BY_PLANRAIL',
+            source_basis TEXT NOT NULL,
+            planning_use TEXT NOT NULL,
+            simulation_note TEXT NOT NULL,
+            reference_1 TEXT,
+            reference_1_url TEXT,
+            reference_2 TEXT,
+            reference_2_url TEXT,
+            reference_3 TEXT,
+            reference_3_url TEXT,
+            reference_4 TEXT,
+            reference_4_url TEXT
+        )
+        """
+    ))
+    pre_count = conn.execute(text("SELECT COUNT(*) FROM freight_train_movements")).scalar()
+    records = []
+    for r in rows:
+        raw_date = r.get("movement_date", "").strip()
+        parsed_date = date.fromisoformat(raw_date) if raw_date else date.today()
+        records.append({
+            "freight_train_id": r["freight_train_id"].strip(),
+            "movement_date": parsed_date,
+            "origin_station_code": r["origin_station_code"].strip(),
+            "destination_station_code": r["destination_station_code"].strip(),
+            "commodity": r.get("commodity", "General").strip(),
+            "load_tonnes": float(r.get("load_tonnes", 0.0) or 0.0),
+            "planned_entry_time": r.get("planned_entry_time", "00:00").strip(),
+            "planned_exit_time": r.get("planned_exit_time", "04:00").strip(),
+            "traffic_priority": r.get("traffic_priority", "Medium").strip(),
+            "corridor": r.get("corridor", "Delhi-Agra").strip(),
+            "data_status": r.get("data_status", "SIMULATED_BY_PLANRAIL").strip(),
+            "source_basis": r.get("source_basis", "PlanRail synthetic freight dataset").strip(),
+            "planning_use": r.get("planning_use", "Traffic conflict and maintenance-block optimization").strip(),
+            "simulation_note": r.get("simulation_note", "Synthetic planning scenario; not real FOIS record.").strip(),
+            "reference_1": r.get("reference_1"),
+            "reference_1_url": r.get("reference_1_url"),
+            "reference_2": r.get("reference_2"),
+            "reference_2_url": r.get("reference_2_url"),
+            "reference_3": r.get("reference_3"),
+            "reference_3_url": r.get("reference_3_url"),
+            "reference_4": r.get("reference_4"),
+            "reference_4_url": r.get("reference_4_url"),
+        })
+    stmt = text(
+        """
+        INSERT INTO freight_train_movements
+            (freight_train_id, movement_date, origin_station_code, destination_station_code,
+             commodity, load_tonnes, planned_entry_time, planned_exit_time, traffic_priority,
+             corridor, data_status, source_basis, planning_use, simulation_note,
+             reference_1, reference_1_url, reference_2, reference_2_url,
+             reference_3, reference_3_url, reference_4, reference_4_url)
+        VALUES
+            (:freight_train_id, :movement_date, :origin_station_code, :destination_station_code,
+             :commodity, :load_tonnes, :planned_entry_time, :planned_exit_time, :traffic_priority,
+             :corridor, :data_status, :source_basis, :planning_use, :simulation_note,
+             :reference_1, :reference_1_url, :reference_2, :reference_2_url,
+             :reference_3, :reference_3_url, :reference_4, :reference_4_url)
+        ON CONFLICT (freight_train_id) DO UPDATE SET
+            movement_date            = EXCLUDED.movement_date,
+            origin_station_code      = EXCLUDED.origin_station_code,
+            destination_station_code = EXCLUDED.destination_station_code,
+            commodity                = EXCLUDED.commodity,
+            load_tonnes              = EXCLUDED.load_tonnes,
+            planned_entry_time       = EXCLUDED.planned_entry_time,
+            planned_exit_time        = EXCLUDED.planned_exit_time,
+            traffic_priority         = EXCLUDED.traffic_priority,
+            corridor                 = EXCLUDED.corridor,
+            data_status              = EXCLUDED.data_status,
+            source_basis             = EXCLUDED.source_basis,
+            planning_use             = EXCLUDED.planning_use,
+            simulation_note          = EXCLUDED.simulation_note,
+            reference_1              = EXCLUDED.reference_1,
+            reference_1_url          = EXCLUDED.reference_1_url,
+            reference_2              = EXCLUDED.reference_2,
+            reference_2_url          = EXCLUDED.reference_2_url,
+            reference_3              = EXCLUDED.reference_3,
+            reference_3_url          = EXCLUDED.reference_3_url,
+            reference_4              = EXCLUDED.reference_4,
+            reference_4_url          = EXCLUDED.reference_4_url
+        """
+    )
+    conn.execute(stmt, records)
+    post_count = conn.execute(text("SELECT COUNT(*) FROM freight_train_movements")).scalar()
+    attempted = len(records)
+    inserted = post_count - pre_count
+    updated = attempted - inserted
+    return attempted, inserted, updated
+
+
 
 # ===========================================================================
 # Phase 3: Post-import validation
@@ -1052,6 +1175,7 @@ def main() -> None:
         ("maintenance_compatibility", load_task_compatibility, all_data["task_compatibility"]),
         ("traffic_windows",       load_traffic_windows,       all_data["traffic_windows"]),
         ("maintenance_windows",   load_maintenance_windows,   all_data["maintenance_windows"]),
+        ("freight_train_movements", load_freight_train_movements, all_data["freight_train_movements"]),
     ]
 
     total_attempted = total_inserted = total_updated = 0
