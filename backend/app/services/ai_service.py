@@ -88,6 +88,8 @@ class AIService:
             priority_category=priority_result["priority_category"],
             priority_components=priority_result["priority_components"],
             risk_contributing_factors=risk_result["risk_contributing_factors"],
+            feature_contributions=risk_result.get("feature_contributions"),
+            shap_values=risk_result.get("shap_values"),
             explanation=explanation,
             model_status=risk_result["model_status"],
         )

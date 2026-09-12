@@ -354,11 +354,89 @@ function RequestAnalysisCard({
             </div>
           )}
 
+          {/* Local SHAP Feature Contributions */}
+          {prediction.feature_contributions && prediction.feature_contributions.length > 0 && (
+            <div className="rounded-md border border-rail-ink/8 bg-rail-paper p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="font-mono text-[10px] font-bold tracking-[0.1em] text-rail-ink/70">
+                  LOCAL SHAP ATTRIBUTIONS (TREE-EXPLAINER FEATURE IMPACT)
+                </div>
+                <div className="flex items-center gap-3 text-[10px] font-mono text-rail-ink/50">
+                  <span className="flex items-center gap-1">
+                    <span className="size-2 rounded-full bg-rail-red/80" /> Increases Risk
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="size-2 rounded-full bg-rail-green/80" /> Decreases Risk
+                  </span>
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {prediction.feature_contributions.map((fc) => {
+                  const isPos = fc.contribution > 0.005;
+                  const isNeg = fc.contribution < -0.005;
+                  return (
+                    <div
+                      key={fc.feature}
+                      className={cn(
+                        "rounded border p-2.5 text-xs transition-colors",
+                        isPos
+                          ? "border-rail-red/20 bg-rail-red/[0.03]"
+                          : isNeg
+                            ? "border-rail-green/20 bg-rail-green/[0.03]"
+                            : "border-rail-ink/8 bg-rail-paper"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-rail-ink/85 truncate">{fc.feature_name}</span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "font-mono text-[9px] px-1.5 py-0 uppercase",
+                            isPos
+                              ? "border-rail-red/30 text-rail-red bg-rail-red/5"
+                              : isNeg
+                                ? "border-rail-green/30 text-rail-green bg-rail-green/5"
+                                : "border-rail-ink/20 text-rail-ink/50"
+                          )}
+                        >
+                          {isPos ? "+ RISK" : isNeg ? "- RISK" : "NEUTRAL"}
+                        </Badge>
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                        <span className="font-mono text-rail-ink/60">Value: {fc.feature_value}</span>
+                        <span
+                          className={cn(
+                            "font-mono font-bold",
+                            isPos ? "text-rail-red" : isNeg ? "text-rail-green" : "text-rail-ink/60"
+                          )}
+                        >
+                          SHAP {fc.contribution > 0 ? `+${fc.contribution.toFixed(3)}` : fc.contribution.toFixed(3)}
+                        </span>
+                      </div>
+                      {/* Visual impact bar */}
+                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-rail-ink/10">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            isPos ? "bg-rail-red" : isNeg ? "bg-rail-green" : "bg-rail-ink/30"
+                          )}
+                          style={{
+                            width: `${Math.min(100, Math.max(10, Math.abs(fc.contribution) * 60))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Risk Factors and Natural Language Briefing */}
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="rounded-md border border-rail-ink/8 bg-rail-paper p-3.5">
               <div className="font-mono text-[10px] font-bold tracking-[0.1em] text-rail-ink/60">
-                IDENTIFIED RISK DRIVERS
+                PRIMARY SHAP RISK DRIVERS
               </div>
               <div className="mt-2 space-y-1.5">
                 {factors.length > 0 ? (

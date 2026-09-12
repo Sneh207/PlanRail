@@ -119,6 +119,21 @@ export interface OptimizationSummary {
   created_at: string;
 }
 
+export interface ActionRequiredItem {
+  id: string;
+  type: "CRITICAL_MAINTENANCE" | "PENDING_BLOCK_DECISION" | "UPCOMING_WINDOW" | string;
+  title: string;
+  section_id: string;
+  badge_text: string;
+  badge_tone: "red" | "amber" | "blue" | "green" | string;
+  risk_score?: number | null;
+  priority_score?: number | null;
+  action_target: string;
+  action_label: string;
+  secondary_target?: string | null;
+  secondary_label?: string | null;
+}
+
 export interface DashboardResponse {
   total_maintenance_requests: number;
   pending_requests: number;
@@ -126,8 +141,89 @@ export interface DashboardResponse {
   overdue_requests: number;
   available_maintenance_windows: number;
   total_trains: number;
+  total_freight_trains?: number;
   latest_optimization?: OptimizationSummary | null;
+  action_required?: ActionRequiredItem[];
 }
+
+export interface EmergencyMaintenanceCreateRequest {
+  section_id: string;
+  asset_id?: string | null;
+  department?: string;
+  asset_type?: string | null;
+  maintenance_type?: string;
+  severity?: number;
+  criticality_score?: number;
+  duration_hours?: number;
+  description?: string | null;
+  due_date?: string | null;
+}
+
+export interface AdminConfigResponse {
+  max_block_duration_hours: number;
+  emergency_priority_multiplier: number;
+  critical_freight_multiplier: number;
+  high_freight_multiplier: number;
+  auto_approval_threshold: number;
+  corridor_speed_limit_kmh: number;
+  dispatch_mode: string;
+  updated_at?: string | null;
+}
+
+export interface AdminConfigUpdateRequest {
+  max_block_duration_hours?: number;
+  emergency_priority_multiplier?: number;
+  critical_freight_multiplier?: number;
+  high_freight_multiplier?: number;
+  auto_approval_threshold?: number;
+  corridor_speed_limit_kmh?: number;
+  dispatch_mode?: string;
+}
+
+export interface AdminHealthResponse {
+  status: string;
+  backend: {
+    status: string;
+    version: string;
+    framework: string;
+  };
+  database: {
+    status: string;
+    dialect: string;
+    healthy: boolean;
+  };
+  ai_engine: {
+    status: string;
+    model_type: string;
+    feature_count: number;
+    decision_threshold: number;
+    explainability: string;
+  };
+  optimizer: {
+    status: string;
+    engine: string;
+    max_time_limit_sec: number;
+    deterministic_seed: number;
+  };
+  what_if_engine: {
+    status: string;
+    supported_scenarios: string[];
+  };
+  data_counts: {
+    stations: number;
+    sections: number;
+    assets: number;
+    maintenance_requests: number;
+    passenger_trains: number;
+    freight_movements: number;
+    maintenance_windows: number;
+    traffic_windows: number;
+    optimized_blocks: number;
+    crew_teams: number;
+  };
+  timestamp: string;
+}
+
 
 export interface BlockTaskResponse {
   block_task_id: string;
@@ -169,6 +265,15 @@ export interface AIPredictRequest {
   request_id: string;
 }
 
+export interface FeatureContribution {
+  feature: string;
+  feature_name: string;
+  feature_value: number;
+  contribution: number;
+  impact: "INCREASES_RISK" | "DECREASES_RISK" | "NEUTRAL";
+  display_text: string;
+}
+
 export interface AIPredictResponse {
   request_id: string;
   risk_probability?: number | null;
@@ -186,6 +291,8 @@ export interface AIPredictResponse {
     traffic_impact: number;
   } | null;
   risk_contributing_factors?: string[] | null;
+  feature_contributions?: FeatureContribution[] | null;
+  shap_values?: Record<string, number> | null;
   explanation?: string | null;
   model_status?: string | null;
 }

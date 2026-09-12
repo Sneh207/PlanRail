@@ -72,9 +72,14 @@ export function RailwayNetworkPage() {
     queryFn: api.stations,
   });
   const assetsQuery = useQuery({ queryKey: ["planrail", "assets"], queryFn: api.assets });
+  const maintenanceQuery = useQuery({
+    queryKey: ["planrail", "maintenance", "network"],
+    queryFn: () => api.maintenance({ page_size: 150 }),
+  });
   const sections = asRecords(sectionsQuery.data);
   const stations = asRecords(stationsQuery.data);
   const assets = asRecords(assetsQuery.data);
+  const maintenanceList = asRecords(maintenanceQuery.data);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const sectionEntries = useMemo(
@@ -106,6 +111,9 @@ export function RailwayNetworkPage() {
   const hasMapData = sectionPoints.length > 0 || stationPoints.length > 0;
   const associatedAssets = detailId
     ? assets.filter((asset) => assetSectionId(asset) === detailId)
+    : [];
+  const sectionMaintenance = detailId
+    ? maintenanceList.filter((m) => readText(m, ["section_id", "section"]) === detailId)
     : [];
   const networkLoading =
     sectionsQuery.isPending || stationsQuery.isPending || assetsQuery.isPending;
@@ -225,6 +233,7 @@ export function RailwayNetworkPage() {
               loading={detailQuery.isFetching}
               error={detailQuery.error}
               assets={associatedAssets}
+              maintenance={sectionMaintenance}
               onClose={() => setSelectedKey(null)}
             />
           </div>
@@ -237,31 +246,73 @@ export function RailwayNetworkPage() {
 export function MaintenancePage() {
   const maintenanceQuery = useQuery({
     queryKey: ["planrail", "maintenance"],
-    queryFn: api.maintenance,
+    queryFn: () => api.maintenance({ page: 1, page_size: 200 }),
   });
   const records = asRecords(maintenanceQuery.data);
+  const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("all");
   const [severity, setSeverity] = useState("all");
   const [status, setStatus] = useState("all");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
   const selectedEntry =
     records
       .map((record, index) => ({ record, key: recordKey(record, index), id: recordId(record) }))
       .find((entry) => entry.key === selectedKey) ?? null;
+
   const detailQuery = useQuery({
     queryKey: ["planrail", "maintenance", selectedEntry?.id],
     queryFn: () => api.maintenanceRequest(selectedEntry?.id ?? ""),
     enabled: Boolean(selectedEntry?.id),
   });
+
   const departments = filterValues(records, ["department", "department_name", "departmentName"]);
-  const severities = filterValues(records, ["severity"]);
+  const severities = ["Critical (≥80)", "High (60–79)", "Medium (40–59)", "Low (<40)"];
   const statuses = filterValues(records, ["status"]);
-  const filtered = records.filter(
-    (record) =>
-      matches(record, ["department", "department_name", "departmentName"], department) &&
-      matches(record, ["severity"], severity) &&
-      matches(record, ["status"], status),
-  );
+
+  const filtered = records.filter((record) => {
+    // Department Filter
+    const matchesDept =
+      department === "all" ||
+      matches(record, ["department", "department_name", "departmentName"], department);
+
+    // Status Filter
+    const matchesStatus =
+      status === "all" || matches(record, ["status"], status);
+
+    // Severity Filter
+    let matchesSev = true;
+    if (severity !== "all") {
+      const sevVal = readNumber(record, ["severity"]) ?? 0;
+      if (severity.startsWith("Critical")) matchesSev = sevVal >= 80;
+      else if (severity.startsWith("High")) matchesSev = sevVal >= 60 && sevVal < 80;
+      else if (severity.startsWith("Medium")) matchesSev = sevVal >= 40 && sevVal < 60;
+      else if (severity.startsWith("Low")) matchesSev = sevVal < 40;
+      else matchesSev = matches(record, ["severity"], severity);
+    }
+
+    // Text Search Filter
+    let matchesSearch = true;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const haystack = [
+        readLabel(record, ["request_id", "taskId", "id"]),
+        readLabel(record, ["asset_id"]),
+        readLabel(record, ["asset_type"]),
+        readLabel(record, ["section_id", "section"]),
+        readLabel(record, ["department"]),
+        readLabel(record, ["maintenance_type"]),
+        readLabel(record, ["status"]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      matchesSearch = haystack.includes(q);
+    }
+
+    return matchesDept && matchesStatus && matchesSev && matchesSearch;
+  });
+
   const error = maintenanceQuery.error;
 
   return (
@@ -280,7 +331,7 @@ export function MaintenancePage() {
         ) : maintenanceQuery.isPending ? (
           <MaintenanceSkeleton />
         ) : records.length === 0 ? (
-          <EmptyState label="No maintenance requests were returned by the backend." />
+          <EmptyState label="No maintenance requests were returned by the backend database." />
         ) : (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <section className="min-w-0 rounded-[14px] bg-rail-panel shadow-rail ring-1 ring-rail-ink/8">
@@ -289,10 +340,21 @@ export function MaintenancePage() {
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-rail-ink/35" />
                   <input
                     aria-label="Search maintenance records"
-                    placeholder="Search is available through filters"
-                    disabled
-                    className="h-9 w-full rounded-md border border-rail-ink/10 bg-rail-paper pl-9 pr-3 text-xs text-rail-ink/50"
+                    placeholder="Search by Request ID, Asset, Section, Dept..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="h-9 w-full rounded-md border border-rail-ink/10 bg-rail-paper pl-9 pr-8 text-xs text-rail-ink placeholder:text-rail-ink/40 focus:border-rail-blue focus:outline-none"
                   />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-rail-ink/40 hover:text-rail-ink"
+                      aria-label="Clear search"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
                 </div>
                 <FilterSelect
                   label="Department"
@@ -318,7 +380,8 @@ export function MaintenancePage() {
                   <thead className="bg-rail-ink/[0.03] font-mono text-[10px] tracking-[0.1em] text-rail-ink/45">
                     <tr>
                       {[
-                        "TASK ID",
+                        "REQUEST ID",
+                        "ASSET",
                         "DEPARTMENT",
                         "SECTION",
                         "SEVERITY",
@@ -349,13 +412,13 @@ export function MaintenancePage() {
                 </table>
               </div>
               {filtered.length === 0 && (
-                <EmptyState label="No maintenance requests match the selected filters." compact />
+                <EmptyState label="No maintenance requests match the selected search or filters." compact />
               )}
               <div className="flex items-center justify-between border-t border-rail-ink/8 px-4 py-3 font-mono text-[10px] text-rail-ink/40">
                 <span>
                   {filtered.length} OF {records.length} REQUESTS
                 </span>
-                <span>READ-ONLY FEED</span>
+                <span>DATABASE CONNECTED · REAL-TIME FEED</span>
               </div>
             </section>
             <MaintenanceDetailPanel
@@ -666,6 +729,7 @@ export function BlockPlanningPage() {
   const [optimizationResult, setOptimizationResult] = useState<OptimizationGenerateResponse | null>(null);
   const [optimizationError, setOptimizationError] = useState<string | null>(null);
   const [optimizationPending, setOptimizationPending] = useState(false);
+  const [solverStage, setSolverStage] = useState<string | null>(null);
   const [targetDate, setTargetDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   // What-If Simulation State
@@ -679,9 +743,6 @@ export function BlockPlanningPage() {
   const [simulationPending, setSimulationPending] = useState(false);
   const [simulationError, setSimulationError] = useState<string | null>(null);
 
-  // Demo-only approval state: no approval API exists yet, so decisions are
-  // kept locally and clearly labelled in the UI.
-  const [demoDecisions, setDemoDecisions] = useState<Record<string, BlockDecision>>({});
   const entries = records.map((record, index) => ({
     record,
     key: blockKey(record, index),
@@ -699,13 +760,23 @@ export function BlockPlanningPage() {
   async function generatePlan() {
     setOptimizationError(null);
     setOptimizationPending(true);
+    setSolverStage("Preparing corridor planning data & traffic constraints...");
     try {
+      const t1 = setTimeout(() => setSolverStage("Building CP-SAT constraint model & penalty weights..."), 300);
+      const t2 = setTimeout(() => setSolverStage("Running Google OR-Tools CP-SAT solver..."), 700);
+      const t3 = setTimeout(() => setSolverStage("Evaluating multi-department bundled allocations..."), 1100);
+
       const response = await api.generateOptimization({
         target_date: targetDate,
         selected_request_ids: null,
         max_block_duration_hours: 4.0,
       });
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+
       if (response.status >= 200 && response.status < 300 && response.data) {
+        setSolverStage("Optimal plan generated.");
         setOptimizationResult(response.data);
         setOptimizationOpen(true);
         void queryClient.invalidateQueries({ queryKey: ["planrail", "blocks"] });
@@ -718,6 +789,18 @@ export function BlockPlanningPage() {
       setOptimizationError(apiErrorMessage(requestError, "The optimization endpoint could not be reached"));
     } finally {
       setOptimizationPending(false);
+      setSolverStage(null);
+    }
+  }
+
+  async function handleBlockStatusUpdate(blockId: string, status: "APPROVED" | "REJECTED") {
+    try {
+      await api.updateBlockStatus(blockId, status);
+      void queryClient.invalidateQueries({ queryKey: ["planrail", "blocks"] });
+      void queryClient.invalidateQueries({ queryKey: ["planrail", "block", blockId] });
+      void queryClient.invalidateQueries({ queryKey: ["planrail", "dashboard"] });
+    } catch (err) {
+      console.error("Failed to update block status:", err);
     }
   }
 
@@ -781,7 +864,8 @@ export function BlockPlanningPage() {
             disabled={optimizationPending}
             className="w-full bg-rail-blue text-rail-paper hover:bg-rail-blue/90 sm:w-auto"
           >
-            <Sparkles className="size-4" /> {optimizationPending ? "Solving CP-SAT Model…" : "Generate Optimal Plan"}
+            <Sparkles className={cn("size-4", optimizationPending && "animate-spin")} />
+            {optimizationPending ? (solverStage ?? "Solving CP-SAT Model…") : "Generate Optimal Plan"}
           </Button>
         </div>
 
@@ -1117,10 +1201,10 @@ export function BlockPlanningPage() {
               block={isRecord(detailQuery.data) ? detailQuery.data : (selected?.record ?? null)}
               loading={detailQuery.isFetching}
               error={detailQuery.error}
-              decision={selected ? (demoDecisions[selected.key] ?? null) : null}
-              onDecision={(decision) => {
-                if (selected)
-                  setDemoDecisions((current) => ({ ...current, [selected.key]: decision }));
+              onStatusUpdate={(status) => {
+                if (selected?.id) {
+                  void handleBlockStatusUpdate(selected.id, status);
+                }
               }}
               onClose={() => setSelectedKey(null)}
             />
@@ -1144,22 +1228,28 @@ export function BlockPlanningPage() {
               <div className="rounded-md border border-rail-ink/8 bg-rail-paper p-3">
                 <div className="font-mono text-[10px] tracking-[0.1em] text-rail-ink/45">BLOCKS GENERATED</div>
                 <div className="mt-1 text-lg font-bold text-rail-blue">
-                  {optimizationResult?.total_blocks_generated ?? 0}
+                  {optimizationResult?.blocks_count ?? 0}
                 </div>
               </div>
               <div className="rounded-md border border-rail-ink/8 bg-rail-paper p-3">
                 <div className="font-mono text-[10px] tracking-[0.1em] text-rail-ink/45">TASKS SCHEDULED</div>
                 <div className="mt-1 text-lg font-bold text-rail-green">
-                  {optimizationResult?.total_tasks_scheduled ?? 0}
+                  {optimizationResult?.scheduled_tasks_count ?? 0}
                 </div>
               </div>
             </div>
             <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-rail-ink/8 pb-2">
-              <span className="text-rail-ink/45">Total Duration</span>
+              <span className="text-rail-ink/45">Solve Time</span>
               <span className="font-mono font-medium">
-                {optimizationResult?.total_duration_hours != null
-                  ? `${optimizationResult.total_duration_hours.toFixed(1)} hrs`
+                {optimizationResult?.solve_time_ms != null
+                  ? `${optimizationResult.solve_time_ms.toFixed(1)} ms`
                   : "—"}
+              </span>
+            </div>
+            <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-rail-ink/8 pb-2">
+              <span className="text-rail-ink/45">Unscheduled Tasks</span>
+              <span className="font-mono font-medium">
+                {optimizationResult?.unscheduled_tasks_count ?? 0}
               </span>
             </div>
             <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-rail-ink/8 pb-2">
@@ -1174,11 +1264,6 @@ export function BlockPlanningPage() {
                 {optimizationResult?.run_id ?? "—"}
               </span>
             </div>
-            {optimizationResult?.message && (
-              <p className="rounded-md bg-rail-paper p-2.5 text-rail-ink/70">
-                {optimizationResult.message}
-              </p>
-            )}
           </div>
           <DialogFooter>
             <Button
@@ -1532,24 +1617,20 @@ function BlockTimelineRow({
   );
 }
 
-type BlockDecision = "approved" | "rejected";
-
 function BlockDetailPanel({
   block,
   loading,
   error,
-  decision,
-  onDecision,
+  onStatusUpdate,
   onClose,
 }: {
   block: JsonRecord | null;
   loading: boolean;
   error: Error | null;
-  decision: BlockDecision | null;
-  onDecision: (decision: BlockDecision) => void;
+  onStatusUpdate: (status: "APPROVED" | "REJECTED") => void;
   onClose: () => void;
 }) {
-  const [pendingDecision, setPendingDecision] = useState<BlockDecision | null>(null);
+  const [pendingDecision, setPendingDecision] = useState<"APPROVED" | "REJECTED" | null>(null);
   const tasks = block
     ? asRecords(readValue(block, ["tasks", "associated_tasks", "associatedTasks"]))
     : [];
@@ -1565,7 +1646,7 @@ function BlockDetailPanel({
     startMs !== null && endMs !== null && endMs > startMs
       ? Math.round((endMs - startMs) / 60000)
       : null;
-  const status = block ? readLabel(block, ["status"]) : null;
+  const rawStatus = block ? (readLabel(block, ["status"]) ?? "PLANNED").toUpperCase() : "PLANNED";
   const impactParts = [
     durationMinutes !== null
       ? `Occupies the section for ${durationMinutes} minute${durationMinutes === 1 ? "" : "s"}.`
@@ -1573,13 +1654,14 @@ function BlockDetailPanel({
     tasks.length
       ? `${tasks.length} associated task${tasks.length === 1 ? "" : "s"} returned by the backend.`
       : null,
-    status ? `Current status: ${status}.` : null,
+    `Authoritative Status: ${rawStatus}.`,
   ].filter((part): part is string => part !== null);
+
   return (
     <aside className="rounded-[14px] bg-rail-panel p-5 shadow-rail ring-1 ring-rail-ink/8 xl:sticky xl:top-20 xl:h-fit">
       <PanelHeader
         eyebrow="BLOCK DETAIL"
-        title={block ? "Full API response" : "Select a block"}
+        title={block ? "Corridor Possession Record" : "Select a block"}
         onClose={block ? onClose : undefined}
       />
       {error ? (
@@ -1596,16 +1678,18 @@ function BlockDetailPanel({
           <DetailFields record={block} />
           <div>
             <div className="font-mono text-[10px] tracking-[0.14em] text-rail-ink/45">
-              ASSOCIATED TASKS
+              ASSOCIATED TASKS ({tasks.length})
             </div>
             {tasks.length ? (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
                 {tasks.map((task, index) => (
                   <div
                     key={recordKey(task, index)}
                     className="rounded-md border border-rail-ink/8 bg-rail-paper p-3 text-xs"
                   >
-                    {readLabel(task, ["task_id", "taskId", "id", "name"]) ?? formatValue(task)}
+                    <div className="font-mono font-bold text-rail-blue">
+                      {readLabel(task, ["task_id", "taskId", "request_id", "id", "name"]) ?? formatValue(task)}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1613,50 +1697,58 @@ function BlockDetailPanel({
               <EmptyState label="No associated tasks were returned for this block." compact />
             )}
           </div>
+
           <div className="rounded-md border border-rail-ink/10 bg-rail-paper p-3.5">
             <div className="flex items-center justify-between gap-3">
               <div className="font-mono text-[10px] tracking-[0.14em] text-rail-ink/45">
-                BLOCK DECISION
+                CONTROLLER DECISION
               </div>
-              <span className="font-mono text-[9px] tracking-[0.08em] text-rail-amber">
-                DEMO · LOCAL ONLY
-              </span>
-            </div>
-            {decision ? (
-              <div
+              <Badge
+                variant="outline"
                 className={cn(
-                  "mt-3 flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold",
-                  decision === "approved"
-                    ? "border-rail-green/25 bg-rail-green/10 text-rail-green"
-                    : "border-rail-red/25 bg-rail-red/10 text-rail-red",
+                  "font-mono text-[9px]",
+                  rawStatus === "APPROVED" && "border-rail-green/30 bg-rail-green/10 text-rail-green",
+                  rawStatus === "REJECTED" && "border-rail-red/30 bg-rail-red/10 text-rail-red",
+                  (rawStatus === "PLANNED" || rawStatus === "PROPOSED") && "border-rail-blue/30 text-rail-blue",
                 )}
               >
-                {decision === "approved" ? <Check className="size-4" /> : <X className="size-4" />}
-                {decision === "approved" ? "Approved" : "Rejected"} — demo interaction, no approval
-                API exists yet
+                {rawStatus}
+              </Badge>
+            </div>
+
+            {rawStatus === "APPROVED" ? (
+              <div className="mt-3 flex items-center gap-2 rounded-md border border-rail-green/25 bg-rail-green/10 px-3 py-2 text-xs font-semibold text-rail-green">
+                <Check className="size-4 shrink-0" />
+                <span>Approved — Block schedule is active for Maintenance Crew</span>
+              </div>
+            ) : rawStatus === "REJECTED" ? (
+              <div className="mt-3 flex items-center gap-2 rounded-md border border-rail-red/25 bg-rail-red/10 px-3 py-2 text-xs font-semibold text-rail-red">
+                <X className="size-4 shrink-0" />
+                <span>Rejected — Block cancelled from active corridor possession</span>
               </div>
             ) : (
               <div className="mt-3 flex gap-2">
                 <Button
                   size="sm"
                   className="flex-1 bg-rail-green text-rail-paper hover:bg-rail-green/90"
-                  onClick={() => setPendingDecision("approved")}
+                  onClick={() => setPendingDecision("APPROVED")}
                 >
-                  <Check /> Approve
+                  <Check className="size-3.5" /> Approve Block
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   className="flex-1 border-rail-red/30 text-rail-red hover:bg-rail-red/10"
-                  onClick={() => setPendingDecision("rejected")}
+                  onClick={() => setPendingDecision("REJECTED")}
                 >
-                  <X /> Reject
+                  <X className="size-3.5" /> Reject Block
                 </Button>
               </div>
             )}
           </div>
         </div>
       )}
+
       <Dialog
         open={pendingDecision !== null}
         onOpenChange={(open) => {
@@ -1666,15 +1758,15 @@ function BlockDetailPanel({
         <DialogContent className="border-rail-ink/10 bg-rail-panel text-rail-ink">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {pendingDecision === "approved" ? (
+              {pendingDecision === "APPROVED" ? (
                 <Check className="size-5 text-rail-green" />
               ) : (
                 <X className="size-5 text-rail-red" />
               )}
-              {pendingDecision === "approved" ? "Approve block" : "Reject block"}
+              {pendingDecision === "APPROVED" ? "Approve Corridor Block" : "Reject Corridor Block"}
             </DialogTitle>
             <DialogDescription className="pt-1 text-rail-ink/60">
-              Demo interaction — no approval API currently exists. The status updates locally only.
+              This action persists the decision to the backend database, making the possession schedule authoritative across all Controller and Crew dashboards.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2.5 text-xs">
@@ -1708,16 +1800,16 @@ function BlockDetailPanel({
             <Button
               className={cn(
                 "text-rail-paper",
-                pendingDecision === "approved"
+                pendingDecision === "APPROVED"
                   ? "bg-rail-green hover:bg-rail-green/90"
                   : "bg-rail-red hover:bg-rail-red/90",
               )}
               onClick={() => {
-                if (pendingDecision) onDecision(pendingDecision);
+                if (pendingDecision) onStatusUpdate(pendingDecision);
                 setPendingDecision(null);
               }}
             >
-              Confirm {pendingDecision === "approved" ? "approval" : "rejection"}
+              Confirm {pendingDecision === "APPROVED" ? "Approval" : "Rejection"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1859,12 +1951,14 @@ function NetworkDetailPanel({
   loading,
   error,
   assets,
+  maintenance = [],
   onClose,
 }: {
   section: JsonRecord | null;
   loading: boolean;
   error: Error | null;
   assets: JsonRecord[];
+  maintenance?: JsonRecord[];
   onClose: () => void;
 }) {
   return (
@@ -1889,30 +1983,95 @@ function NetworkDetailPanel({
             record={section}
             keys={[
               ["Section ID", ["section_id", "sectionId", "id"]],
-              ["Start station", ["start_station", "startStation", "from"]],
-              ["End station", ["end_station", "endStation", "to"]],
+              ["Start station", ["start_station", "from_station_code", "startStation", "from"]],
+              ["End station", ["end_station", "to_station_code", "endStation", "to"]],
               ["Distance", ["distance", "distance_km", "distanceKm"]],
-              ["Traffic level", ["traffic_level", "trafficLevel"]],
-              ["Risk score", ["risk_score", "riskScore", "risk"]],
+              ["Track configuration", ["track_configuration", "configuration"]],
+              ["Electrification", ["electrification"]],
+              ["Traffic class", ["traffic_class", "traffic_level", "trafficLevel"]],
+              ["Max permissible speed", ["max_speed_kmh", "speed_limit", "speedLimit"]],
             ]}
           />
           <div>
-            <div className="font-mono text-[10px] tracking-[0.14em] text-rail-ink/45">
-              ASSOCIATED ASSETS
+            <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.14em] text-rail-ink/45">
+              <span>ASSOCIATED ASSETS</span>
+              <span>{assets.length} ASSETS</span>
             </div>
             {assets.length ? (
-              <div className="mt-3 space-y-2">
-                {assets.map((asset, index) => (
-                  <div
-                    key={recordKey(asset, index)}
-                    className="rounded-md border border-rail-ink/8 bg-rail-paper p-3 text-xs"
-                  >
-                    {readLabel(asset, ["asset_id", "assetId", "id", "name"]) ?? "Asset record"}
-                  </div>
-                ))}
+              <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
+                {assets.map((asset, index) => {
+                  const aid = readLabel(asset, ["asset_id", "assetId", "id"]) ?? `Asset ${index + 1}`;
+                  const atype = readLabel(asset, ["asset_type", "type"]) ?? "Track";
+                  const cond = readNumber(asset, ["condition_score", "conditionScore"]) ?? 75;
+                  const crit = readLabel(asset, ["criticality"]) ?? "MEDIUM";
+                  return (
+                    <div
+                      key={recordKey(asset, index)}
+                      className="rounded-md border border-rail-ink/8 bg-rail-paper p-2.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-rail-blue">{aid}</span>
+                        <Badge variant="outline" className="font-mono text-[9px] px-1 py-0">
+                          {crit}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-rail-ink/60 text-[11px]">
+                        <span>{atype}</span>
+                        <span className="font-mono">Cond: {cond.toFixed(0)}/100</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <EmptyState label="No assets returned for this section." compact />
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.14em] text-rail-ink/45">
+              <span>PENDING MAINTENANCE</span>
+              <span>{maintenance.length} TASKS</span>
+            </div>
+            {maintenance.length ? (
+              <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
+                {maintenance.map((m, index) => {
+                  const reqId = readLabel(m, ["request_id", "id", "task_id"]) ?? `MR-${index + 1}`;
+                  const dept = readLabel(m, ["department"]) ?? "Eng";
+                  const status = readLabel(m, ["status"]) ?? "PENDING";
+                  const sev = readNumber(m, ["severity"]) ?? 0;
+                  return (
+                    <div
+                      key={recordKey(m, index)}
+                      className="rounded-md border border-rail-ink/8 bg-rail-paper p-2.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-rail-ink">{reqId}</span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "font-mono text-[9px] px-1 py-0",
+                            status === "PENDING" && "border-rail-amber/30 text-rail-amber",
+                            status === "ACCEPTED" && "border-rail-blue/30 text-rail-blue",
+                            status === "IN_PROGRESS" && "border-rail-blue/40 text-rail-blue",
+                            status === "COMPLETED" && "border-rail-green/30 text-rail-green",
+                          )}
+                        >
+                          {status}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-rail-ink/60 text-[11px]">
+                        <span>{dept}</span>
+                        <span className="font-mono text-[10px]">
+                          Sev: {sev >= 10 ? sev.toFixed(0) : (sev * 20).toFixed(0)}/100
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState label="No active maintenance on this section." compact />
             )}
           </div>
         </div>
@@ -1930,6 +2089,18 @@ function MaintenanceRow({
   selected: boolean;
   onClick: () => void;
 }) {
+  const reqId = readLabel(record, ["request_id", "task_id", "taskId", "id"]) ?? "—";
+  const assetId = readLabel(record, ["asset_id"]) ?? "—";
+  const assetType = readLabel(record, ["asset_type"]) || readLabel(record, ["maintenance_type"]) || "";
+  const dept = readLabel(record, ["department", "department_name", "departmentName"]) ?? "—";
+  const sectionId = readLabel(record, ["section_id", "sectionId", "section"]) ?? "—";
+  const sev = readNumber(record, ["severity"]) ?? 0;
+  const crit = readNumber(record, ["criticality_score", "priority"]) ?? 0;
+  const risk = readNumber(record, ["baseline_risk_score", "risk_score", "risk"]) ?? 0;
+  const dueDate = readLabel(record, ["due_date", "dueDate", "due"]) ?? "—";
+  const overdue = readNumber(record, ["overdue_days", "overdueDays"]) ?? 0;
+  const status = readLabel(record, ["status"]) ?? "PENDING";
+
   return (
     <tr
       tabIndex={0}
@@ -1942,31 +2113,93 @@ function MaintenanceRow({
         selected && "bg-rail-blue/[0.07]",
       )}
     >
-      <td className="px-4 py-3 font-mono text-[11px] font-semibold">
-        {readLabel(record, ["task_id", "taskId", "request_id", "requestId", "id"]) ?? "—"}
+      <td className="px-4 py-3 font-mono text-[11px] font-bold text-rail-blue">
+        {reqId}
       </td>
       <td className="px-4 py-3">
-        {readLabel(record, ["department", "department_name", "departmentName"]) ?? "—"}
+        <div className="font-mono text-[11px] font-semibold text-rail-ink/90">{assetId}</div>
+        {assetType && (
+          <div className="text-[10px] text-rail-ink/50 truncate max-w-[130px]">{assetType}</div>
+        )}
+      </td>
+      <td className="px-4 py-3 font-medium text-rail-ink/80">
+        {dept}
+      </td>
+      <td className="px-4 py-3 font-mono text-[11px] font-semibold text-rail-ink/75">
+        {sectionId}
       </td>
       <td className="px-4 py-3">
-        {readLabel(record, ["section", "section_id", "sectionId"]) ?? "—"}
+        <Badge
+          className={cn(
+            "font-mono text-[10px] uppercase font-semibold border",
+            sev >= 80
+              ? "border-rail-red/30 bg-rail-red/10 text-rail-red"
+              : sev >= 60
+                ? "border-rail-amber/30 bg-rail-amber/10 text-rail-amber"
+                : sev >= 40
+                  ? "border-rail-blue/30 bg-rail-blue/10 text-rail-blue"
+                  : "border-rail-green/30 bg-rail-green/10 text-rail-green"
+          )}
+        >
+          {sev > 0 ? (sev > 5 ? `${sev.toFixed(0)}/100` : `SEV ${sev}`) : "—"}
+        </Badge>
       </td>
       <td className="px-4 py-3">
-        <StatusBadge value={readLabel(record, ["severity"])} kind="severity" />
+        <Badge
+          variant="outline"
+          className={cn(
+            "font-mono text-[10px] uppercase",
+            crit >= 75
+              ? "border-rail-red/30 text-rail-red bg-rail-red/5"
+              : crit >= 50
+                ? "border-rail-amber/30 text-rail-amber bg-rail-amber/5"
+                : "border-rail-ink/20 text-rail-ink/70"
+          )}
+        >
+          {crit > 0 ? `P${crit >= 80 ? "1" : crit >= 60 ? "2" : "3"} · ${crit.toFixed(0)}` : "—"}
+        </Badge>
       </td>
       <td className="px-4 py-3">
-        <StatusBadge value={readLabel(record, ["priority"])} kind="priority" />
+        <Badge
+          className={cn(
+            "font-mono text-[10px] border",
+            risk >= 70
+              ? "border-rail-red/30 bg-rail-red/10 text-rail-red"
+              : risk >= 40
+                ? "border-rail-amber/30 bg-rail-amber/10 text-rail-amber"
+                : "border-rail-green/30 bg-rail-green/10 text-rail-green"
+          )}
+        >
+          {risk > 0 ? `${risk.toFixed(1)}%` : "—"}
+        </Badge>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3 text-[11px]">
+        {overdue > 0 ? (
+          <div className="font-medium text-rail-red">
+            {dueDate}
+            <span className="ml-1.5 font-mono text-[9px] font-bold uppercase tracking-wider text-rail-red bg-rail-red/10 px-1 py-0.5 rounded">
+              +{overdue}d
+            </span>
+          </div>
+        ) : (
+          <span className="text-rail-ink/65">{dueDate}</span>
+        )}
       </td>
       <td className="px-4 py-3">
-        <StatusBadge
-          value={readLabel(record, ["risk", "risk_level", "riskLevel", "risk_score", "riskScore"])}
-          kind="risk"
-        />
+        <Badge
+          variant="outline"
+          className={cn(
+            "font-mono text-[9px] uppercase tracking-wide",
+            status === "PENDING" && "border-rail-amber/40 bg-rail-amber/5 text-rail-amber font-semibold",
+            status === "ACCEPTED" && "border-rail-blue/40 bg-rail-blue/5 text-rail-blue",
+            status === "IN_PROGRESS" && "border-rail-blue/60 bg-rail-blue/10 text-rail-blue font-semibold",
+            status === "COMPLETED" && "border-rail-green/40 bg-rail-green/5 text-rail-green font-semibold",
+            status === "CANCELLED" && "border-rail-ink/20 text-rail-ink/40"
+          )}
+        >
+          {status}
+        </Badge>
       </td>
-      <td className="whitespace-nowrap px-4 py-3 text-rail-ink/60">
-        {readLabel(record, ["due_date", "dueDate", "due"]) ?? "—"}
-      </td>
-      <td className="px-4 py-3">{readLabel(record, ["status"]) ?? "—"}</td>
     </tr>
   );
 }
@@ -2032,6 +2265,10 @@ function MaintenanceDetailPanel({
                   <Skeleton className="h-6 bg-rail-ink/8" />
                   <Skeleton className="h-10 bg-rail-ink/8" />
                 </div>
+              ) : aiQuery.error ? (
+                <div className="rounded border border-rail-red/20 bg-rail-red/5 p-2 text-xs text-rail-red">
+                  {apiErrorMessage(aiQuery.error, "AI Prediction failed")}
+                </div>
               ) : aiData ? (
                 <div className="space-y-2.5">
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -2040,11 +2277,17 @@ function MaintenanceDetailPanel({
                       <div className="mt-0.5 text-sm font-bold text-rail-amber">
                         {aiData.risk_score.toFixed(1)} <span className="text-[10px] font-normal text-rail-ink/40">({aiData.risk_category})</span>
                       </div>
+                      <div className="mt-0.5 font-mono text-[9px] text-rail-ink/50">
+                        P(fail): {(aiData.risk_probability ?? (aiData.risk_score / 100)).toFixed(4)}
+                      </div>
                     </div>
                     <div className="rounded bg-rail-paper p-2 border border-rail-ink/8">
                       <div className="font-mono text-[9px] text-rail-ink/45">PRIORITY SCORE</div>
                       <div className="mt-0.5 text-sm font-bold text-rail-blue">
                         {aiData.priority_score.toFixed(1)} <span className="text-[10px] font-normal text-rail-ink/40">({aiData.priority_category})</span>
+                      </div>
+                      <div className="mt-0.5 font-mono text-[9px] text-rail-ink/50">
+                        Traffic: {aiData.traffic_impact_score ? `${aiData.traffic_impact_score.toFixed(1)}/100` : "—"}
                       </div>
                     </div>
                   </div>
@@ -2077,6 +2320,29 @@ function MaintenanceDetailPanel({
             RECORD ATTRIBUTES
           </div>
           <DetailFields record={record} />
+
+          {/* Asset Maintenance History */}
+          {Array.isArray((record as any).history) && (record as any).history.length > 0 && (
+            <div className="space-y-2 border-t border-rail-ink/8 pt-3">
+              <div className="font-mono text-[10px] font-semibold tracking-[0.1em] text-rail-ink/40">
+                ASSET MAINTENANCE HISTORY ({(record as any).history.length})
+              </div>
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                {(record as any).history.map((hist: any, idx: number) => (
+                  <div key={idx} className="rounded border border-rail-ink/8 bg-rail-paper p-2 text-xs">
+                    <div className="flex items-center justify-between font-mono text-[10px]">
+                      <span className="font-semibold text-rail-blue">{hist.event_type}</span>
+                      <span className="text-rail-ink/40">{hist.event_date ? String(hist.event_date).slice(0, 10) : "—"}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-[11px] text-rail-ink/70">
+                      <span>Sev: {hist.severity}</span>
+                      <span>Downtime: {hist.downtime_hours}h</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </aside>

@@ -38,6 +38,20 @@ RISK_FEATURE_COLUMNS = [
 DEFAULT_THRESHOLD = 0.5684
 CALIBRATED_RISK_THRESHOLD = DEFAULT_THRESHOLD
 
+FEATURE_METADATA: Dict[str, Dict[str, str]] = {
+    "condition_score": {"name": "Structural Condition", "unit": "/100"},
+    "severity": {"name": "Defect Severity Rating", "unit": "/10"},
+    "criticality": {"name": "Asset Operational Criticality", "unit": "/10"},
+    "overdue_days": {"name": "Inspection Overdue Days", "unit": "days"},
+    "historical_failures": {"name": "Historical Failure Frequency", "unit": "incidents"},
+    "train_density": {"name": "Passenger Train Density", "unit": "trains/day"},
+    "freight_train_density": {"name": "Freight Movement Volume", "unit": "freight/day"},
+    "freight_share_percent": {"name": "Freight Traffic Share", "unit": "%"},
+    "asset_age": {"name": "Asset Operating Age", "unit": "years"},
+    "maintenance_frequency": {"name": "Maintenance Frequency", "unit": "months"},
+    "previous_defects": {"name": "Past Defect Frequency", "unit": "defects"},
+}
+
 
 class RiskModel:
     """
@@ -247,66 +261,94 @@ class RiskModel:
             return {}
 
     @classmethod
-    def get_risk_drivers(cls, features: Dict[str, Any], shap_dict: Optional[Dict[str, float]] = None) -> List[str]:
+    def get_feature_contributions(
+        cls, features: Dict[str, Any], shap_dict: Dict[str, float]
+    ) -> List[Dict[str, Any]]:
+        """
+        Builds structured feature contributions for each of the 11 features with SHAP impact.
+        """
+        contributions: List[Dict[str, Any]] = []
+        feature_df = cls._build_feature_dataframe(features)
+
+        for col in cls._feature_columns:
+            val = float(feature_df[col].iloc[0])
+            shap_val = float(shap_dict.get(col, 0.0))
+            meta = FEATURE_METADATA.get(col, {"name": col.replace("_", " ").title(), "unit": ""})
+            f_name = meta["name"]
+
+            if shap_val > 0.005:
+                impact = "INCREASES_RISK"
+                direction_str = "Increases risk"
+            elif shap_val < -0.005:
+                impact = "DECREASES_RISK"
+                direction_str = "Decreases risk"
+            else:
+                impact = "NEUTRAL"
+                direction_str = "Neutral"
+
+            contributions.append({
+                "feature": col,
+                "feature_name": f_name,
+                "feature_value": round(val, 2),
+                "contribution": round(shap_val, 4),
+                "impact": impact,
+                "display_text": f"{shap_val:+.3f} ({direction_str})",
+            })
+
+        contributions.sort(key=lambda x: abs(x["contribution"]), reverse=True)
+        return contributions
+
+    @classmethod
+    def get_risk_drivers(
+        cls, features: Dict[str, Any], shap_dict: Optional[Dict[str, float]] = None
+    ) -> List[str]:
         """Identifies top contributing risk factors based on SHAP importances and feature values."""
-        drivers: List[Tuple[float, str]] = []
+        drivers: List[str] = []
 
         if shap_dict:
-            # Sort features by absolute SHAP impact
             sorted_shap = sorted(shap_dict.items(), key=lambda x: abs(x[1]), reverse=True)
+            feature_df = cls._build_feature_dataframe(features)
+
             for feat, val in sorted_shap:
-                if val <= 0:
+                if abs(val) < 0.005:
                     continue
-                if feat == "condition_score":
-                    raw = features.get("condition_score", features.get("raw_condition_score", 75.0))
-                    drivers.append((val * 10.0, f"Structural condition degradation (score: {raw:.1f}/100, SHAP +{val:.3f})"))
-                elif feat == "historical_failures":
-                    cnt = features.get("historical_failures", features.get("historical_event_count", 0))
-                    drivers.append((val * 10.0, f"Elevated historical failure frequency ({cnt} incident{'s' if cnt != 1 else ''}, SHAP +{val:.3f})"))
-                elif feat == "severity":
-                    sev = features.get("severity", features.get("raw_severity", 5.0))
-                    drivers.append((val * 10.0, f"High defect severity rating ({sev:.1f}/10, SHAP +{val:.3f})"))
-                elif feat == "overdue_days":
-                    ovd = features.get("overdue_days", features.get("raw_overdue_days", 0))
-                    if ovd > 0:
-                        drivers.append((val * 10.0, f"Overdue inspection maintenance ({ovd} days past schedule, SHAP +{val:.3f})"))
-                elif feat == "asset_age":
-                    age = features.get("asset_age", features.get("asset_age_years", 10))
-                    drivers.append((val * 10.0, f"Aging asset operating lifecycle ({age} years in service, SHAP +{val:.3f})"))
-                elif feat in ("train_density", "freight_train_density", "freight_share_percent"):
-                    td = features.get("train_density", 55.0)
-                    fd = features.get("freight_train_density", 50.0)
-                    drivers.append((val * 10.0, f"Corridor traffic pressure ({td:.0f} pax + {fd:.0f} freight/day, SHAP +{val:.3f})"))
+                meta = FEATURE_METADATA.get(feat, {"name": feat.replace("_", " ").title(), "unit": ""})
+                f_name = meta["name"]
+                f_val = float(feature_df[feat].iloc[0])
+                unit = meta.get("unit", "")
+                val_str = f"{f_val:.1f}{unit}" if unit else f"{f_val:.1f}"
+
+                if val > 0:
+                    drivers.append(f"{f_name} ({val_str}, SHAP +{val:.3f} — increases risk)")
+                else:
+                    drivers.append(f"{f_name} ({val_str}, SHAP {val:.3f} — decreases risk)")
+
+                if len(drivers) >= 4:
+                    break
 
         if not drivers:
             # Domain-based driver extraction fallback
             condition_risk = features.get("condition_risk", 0.0)
             raw_cond = features.get("raw_condition_score", 100.0)
             if condition_risk >= 30.0:
-                drivers.append((condition_risk * 0.35, f"Structural condition degradation (score: {raw_cond:.1f}/100)"))
+                drivers.append(f"Structural condition degradation (score: {raw_cond:.1f}/100 — increases risk)")
 
             historical_count = features.get("historical_event_count", 0)
-            failure_rate = features.get("failure_rate", 0.0)
             if historical_count > 0:
-                drivers.append((failure_rate * 0.25, f"Elevated historical failure frequency ({historical_count} past incident{'s' if historical_count != 1 else ''})"))
+                drivers.append(f"Elevated historical failure frequency ({historical_count} past incident{'s' if historical_count != 1 else ''} — increases risk)")
 
             severity = features.get("raw_severity", 50.0)
             if severity >= 70.0:
-                drivers.append((severity * 0.20, f"High defect severity rating ({severity:.1f}/100)"))
+                drivers.append(f"High defect severity rating ({severity:.1f}/100 — increases risk)")
 
             overdue_days = features.get("raw_overdue_days", 0)
             if overdue_days > 0:
-                drivers.append((min(overdue_days * 3.0, 100.0) * 0.12, f"Overdue inspection maintenance ({overdue_days} days past schedule)"))
+                drivers.append(f"Overdue inspection maintenance ({overdue_days} days past schedule — increases risk)")
 
-            asset_age = features.get("asset_age_years", 0)
-            if asset_age >= 15:
-                drivers.append((asset_age * 1.5, f"Aging asset operating lifecycle ({asset_age} years in service)"))
-
-        drivers.sort(key=lambda x: x[0], reverse=True)
         if not drivers:
             return ["Asset operating within nominal risk boundaries."]
 
-        return [d[1] for d in drivers[:4]]
+        return drivers[:4]
 
     @classmethod
     def predict(cls, features: Dict[str, Any]) -> Dict[str, Any]:
@@ -319,6 +361,7 @@ class RiskModel:
         category = cls.categorize_risk(prob, severity_norm)
         shap_dict = cls.compute_shap_importances(features)
         drivers = cls.get_risk_drivers(features, shap_dict)
+        contributions = cls.get_feature_contributions(features, shap_dict)
 
         status_str = cls.MODEL_STATUS if cls._is_loaded else "DOMAIN_CALIBRATED_MODEL"
 
@@ -327,8 +370,10 @@ class RiskModel:
             "risk_score": score,
             "risk_category": category,
             "risk_contributing_factors": drivers,
+            "feature_contributions": contributions,
             "shap_values": shap_dict,
             "model_status": status_str,
             "calibrated_threshold": cls._threshold,
             "model_metrics": cls._metrics,
         }
+

@@ -11,6 +11,7 @@ from app.models.block import MaintenanceWindow, OptimizationRun, OptimizedBlock,
 from app.models.compatibility import MaintenanceCompatibility
 from app.models.simulation import SimulationRun
 from app.models.freight import FreightTrainMovement
+from app.models.admin_config import AdminConfiguration
 
 __all__ = [
     "User",
@@ -33,4 +34,6 @@ __all__ = [
     "MaintenanceCompatibility",
     "SimulationRun",
     "FreightTrainMovement",
+    "AdminConfiguration",
 ]
+

@@ -78,6 +78,21 @@ async function postJson<T>(
   }
 }
 
+async function patchJson<T>(
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; data: T }> {
+  try {
+    const response = await apiClient.patch<T>(path, body);
+    return { status: response.status, data: response.data };
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
+      return { status: error.response.status, data: error.response.data as T };
+    }
+    throw error;
+  }
+}
+
 export const api = {
   health: () => getJson<{ status: string }>("/api/v1/health"),
   healthDb: () =>
@@ -115,6 +130,10 @@ export const api = {
     getJson<MaintenanceRequestDetailResponse>(
       `/api/v1/maintenance/${encodeURIComponent(requestId)}`,
     ),
+  updateMaintenanceStatus: (requestId: string, status: string) =>
+    patchJson<MaintenanceRequestResponse>(`/api/v1/maintenance/${encodeURIComponent(requestId)}/status`, { status }),
+  createEmergencyMaintenance: (body: any) =>
+    postJson<MaintenanceRequestResponse>("/api/v1/maintenance/emergency", body),
   trains: (params?: { train_type?: string; page?: number; page_size?: number }) =>
     getJson<PaginatedResponse<TrainResponse>>("/api/v1/trains", params),
   train: (trainNumber: string) =>
@@ -132,10 +151,16 @@ export const api = {
   }) => getJson<PaginatedResponse<FreightTrainMovementResponse>>("/api/v1/freight-trains", params),
   freightTrain: (freightTrainId: string) =>
     getJson<FreightTrainMovementResponse>(`/api/v1/freight-trains/${encodeURIComponent(freightTrainId)}`),
+  maintenanceWindows: (params?: { section_id?: string }) =>
+    getJson<PaginatedResponse<any>>("/api/v1/maintenance-windows", params),
+  trafficWindows: (params?: { section_id?: string }) =>
+    getJson<PaginatedResponse<any>>("/api/v1/traffic-windows", params),
   blocks: (params?: { page?: number; page_size?: number }) =>
     getJson<PaginatedResponse<OptimizedBlockResponse>>("/api/v1/blocks", params),
   block: (blockId: string) =>
     getJson<OptimizedBlockResponse>(`/api/v1/blocks/${encodeURIComponent(blockId)}`),
+  updateBlockStatus: (blockId: string, status: string) =>
+    patchJson<OptimizedBlockResponse>(`/api/v1/blocks/${encodeURIComponent(blockId)}/status`, { status }),
   generateOptimization: (body: OptimizationGenerateRequest) =>
     postJson<OptimizationGenerateResponse>("/api/v1/optimization/generate", body),
   predict: (body: AIPredictRequest) =>
@@ -143,7 +168,12 @@ export const api = {
   aiInsights: () => getJson<AIInsightsResponse>("/api/v1/ai/insights"),
   runSimulation: (body: SimulationRunRequest) =>
     postJson<SimulationRunResponse>("/api/v1/simulation/run", body),
+  adminHealth: () => getJson<any>("/api/v1/admin/health"),
+  adminConfig: () => getJson<any>("/api/v1/admin/config"),
+  updateAdminConfig: (body: any) =>
+    postJson<any>("/api/v1/admin/config", body),
 };
+
 
 export function asRecords(value: unknown): JsonRecord[] {
   if (Array.isArray(value)) return value.filter(isRecord);

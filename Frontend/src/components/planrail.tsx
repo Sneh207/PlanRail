@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   BarChart3,
   BrainCircuit,
   Boxes,
@@ -603,6 +604,10 @@ export function DashboardPage() {
               />
             ))}
           </section>
+          <ControllerAttentionSection
+            items={data?.action_required ?? []}
+            loading={dashboard.isPending}
+          />
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <NetworkPreview
               sections={sectionRecords}
@@ -618,6 +623,115 @@ export function DashboardPage() {
         </>
       )}
     </div>
+  );
+}
+
+function ControllerAttentionSection({
+  items,
+  loading,
+}: {
+  items: Array<{
+    id: string;
+    type: string;
+    title: string;
+    section_id: string;
+    details: string;
+    risk_score?: number;
+    priority_score?: number;
+    action_label: string;
+    action_path: string;
+  }>;
+  loading: boolean;
+}) {
+  const navigate = useNavigate();
+  if (loading) {
+    return (
+      <section className="rounded-[14px] bg-rail-panel p-5 shadow-rail ring-1 ring-rail-ink/8">
+        <Skeleton className="h-6 w-48 bg-rail-ink/8" />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-28 bg-rail-ink/8" />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <section className="rounded-[14px] border border-rail-amber/25 bg-rail-panel p-5 shadow-rail">
+      <div className="flex items-center justify-between border-b border-rail-ink/8 pb-3">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="size-4 text-rail-amber" />
+          <span className="font-mono text-xs font-bold tracking-[0.12em] text-rail-ink">
+            CONTROLLER ATTENTION &amp; IMMEDIATE ACTIONS
+          </span>
+          <Badge variant="outline" className="border-rail-amber/40 bg-rail-amber/10 font-mono text-[9px] text-rail-amber">
+            {items.length} ACTIVE ITEMS
+          </Badge>
+        </div>
+        <span className="font-mono text-[10px] text-rail-ink/40">REAL-TIME OPERATIONAL TRIGGERS</span>
+      </div>
+
+      <div className="mt-3.5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map((item) => (
+          <div
+            key={`${item.type}-${item.id}`}
+            className="flex flex-col justify-between rounded-lg border border-rail-ink/10 bg-rail-paper p-3.5 transition-all hover:border-rail-blue/40 hover:shadow-sm"
+          >
+            <div>
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-mono text-[10px] font-bold text-rail-blue">
+                  {item.id}
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "font-mono text-[8px] px-1 py-0",
+                    item.type === "CRITICAL_MAINTENANCE" && "border-rail-red/40 bg-rail-red/10 text-rail-red",
+                    item.type === "PENDING_BLOCK_DECISION" && "border-rail-blue/40 bg-rail-blue/10 text-rail-blue",
+                    item.type === "FEASIBLE_WINDOW" && "border-rail-green/40 bg-rail-green/10 text-rail-green",
+                    item.type === "OVERDUE_TASK" && "border-rail-amber/40 bg-rail-amber/10 text-rail-amber",
+                  )}
+                >
+                  {item.section_id}
+                </Badge>
+              </div>
+
+              <div className="mt-1 text-xs font-semibold text-rail-ink line-clamp-1">
+                {item.title}
+              </div>
+
+              <p className="mt-1 text-[11px] leading-relaxed text-rail-ink/65 line-clamp-2">
+                {item.details}
+              </p>
+
+              {(item.risk_score != null || item.priority_score != null) && (
+                <div className="mt-2 flex items-center gap-2 font-mono text-[9px]">
+                  {item.risk_score != null && (
+                    <span className="text-rail-amber">Risk: {item.risk_score.toFixed(1)}</span>
+                  )}
+                  {item.priority_score != null && (
+                    <span className="text-rail-blue">Priority: {item.priority_score.toFixed(1)}</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate({ to: item.action_path })}
+              className="mt-3 h-7 w-full justify-between border-rail-ink/15 text-[10px] font-mono hover:bg-rail-blue/10 hover:text-rail-blue hover:border-rail-blue/30"
+            >
+              <span>{item.action_label}</span>
+              <ArrowRight className="size-3" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

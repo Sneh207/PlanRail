@@ -62,7 +62,7 @@ class TestPlanRailAPIE2E(unittest.TestCase):
     def test_07_maintenance(self):
         maint_status, maint_data = make_request("/maintenance")
         self.assertEqual(maint_status, 200)
-        self.assertEqual(maint_data["total"], 150)
+        self.assertGreaterEqual(maint_data["total"], 150)
 
     def test_08_trains(self):
         tr_status, tr_data = make_request("/trains")

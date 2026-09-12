@@ -15,7 +15,9 @@ from app.api.routes import (
     blocks,
     contracts,
     freight,
+    admin,
 )
+
 
 
 @asynccontextmanager
@@ -69,3 +71,5 @@ app.include_router(windows.router, prefix=prefix, tags=["Windows & Traffic"])
 app.include_router(blocks.router, prefix=prefix, tags=["Blocks"])
 app.include_router(contracts.router, prefix=prefix, tags=["Advanced Services"])
 app.include_router(freight.router, prefix=prefix, tags=["Freight Planning"])
+app.include_router(admin.router, prefix=prefix, tags=["Admin & System"])
+

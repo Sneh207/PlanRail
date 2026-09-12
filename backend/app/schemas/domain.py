@@ -130,6 +130,20 @@ class OptimizationSummary(BaseModel):
     status: str
     created_at: datetime
 
+class ActionRequiredItem(BaseModel):
+    id: str
+    type: str  # "CRITICAL_MAINTENANCE", "PENDING_BLOCK_DECISION", "UPCOMING_WINDOW"
+    title: str
+    section_id: str
+    badge_text: str
+    badge_tone: str  # "red", "amber", "blue", "green"
+    risk_score: Optional[float] = None
+    priority_score: Optional[float] = None
+    action_target: str
+    action_label: str
+    secondary_target: Optional[str] = None
+    secondary_label: Optional[str] = None
+
 class DashboardResponse(BaseModel):
     total_maintenance_requests: int
     pending_requests: int
@@ -137,13 +151,63 @@ class DashboardResponse(BaseModel):
     overdue_requests: int
     available_maintenance_windows: int
     total_trains: int
+    total_freight_trains: Optional[int] = 36
     latest_optimization: Optional[OptimizationSummary] = None
+    action_required: List[ActionRequiredItem] = []
+
+class MaintenanceStatusUpdateRequest(BaseModel):
+    status: str  # "PENDING", "ACCEPTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"
+
+class EmergencyMaintenanceCreateRequest(BaseModel):
+    section_id: str
+    asset_id: Optional[str] = None
+    department: str = "Engineering"
+    asset_type: Optional[str] = "Track / Permanent Way"
+    maintenance_type: str = "Emergency Repair"
+    severity: float = 5.0
+    criticality_score: float = 5.0
+    duration_hours: float = 2.0
+    description: Optional[str] = None
+    due_date: Optional[date] = None
+
+class BlockStatusUpdateRequest(BaseModel):
+    status: str  # "PROPOSED", "APPROVED", "MODIFIED", "REJECTED", "COMPLETED"
+
+class AdminConfigResponse(BaseModel):
+    max_block_duration_hours: float = 4.0
+    emergency_priority_multiplier: float = 1.5
+    critical_freight_multiplier: float = 1.5
+    high_freight_multiplier: float = 1.2
+    auto_approval_threshold: float = 80.0
+    corridor_speed_limit_kmh: int = 160
+    dispatch_mode: str = "AUTOMATIC_OPTIMIZATION"
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AdminConfigUpdateRequest(BaseModel):
+    max_block_duration_hours: Optional[float] = None
+    emergency_priority_multiplier: Optional[float] = None
+    critical_freight_multiplier: Optional[float] = None
+    high_freight_multiplier: Optional[float] = None
+    auto_approval_threshold: Optional[float] = None
+    corridor_speed_limit_kmh: Optional[int] = None
+    dispatch_mode: Optional[str] = None
+
 
 # Optimization / Contract Schemas
 class OptimizationGenerateRequest(BaseModel):
     target_date: date
     selected_request_ids: Optional[List[str]] = None
     max_block_duration_hours: Optional[float] = 4.0
+
+class FeatureContribution(BaseModel):
+    feature: str
+    feature_name: str
+    feature_value: float
+    contribution: float
+    impact: str  # "INCREASES_RISK" | "DECREASES_RISK" | "NEUTRAL"
+    display_text: str
 
 class AIPredictRequest(BaseModel):
     request_id: str
@@ -159,8 +223,10 @@ class AIPredictResponse(BaseModel):
     priority_category: Optional[str] = None
     priority_components: Optional[dict[str, float]] = None
     risk_contributing_factors: Optional[List[str]] = None
+    feature_contributions: Optional[List[FeatureContribution]] = None
+    shap_values: Optional[dict[str, float]] = None
     explanation: Optional[str] = None
-    model_status: Optional[str] = "DOMAIN_CALIBRATED_MODEL"
+    model_status: Optional[str] = "XGBOOST_TRAINED_MODEL"
 
     model_config = ConfigDict(from_attributes=True)
 

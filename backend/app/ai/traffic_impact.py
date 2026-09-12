@@ -47,6 +47,11 @@ class TrafficImpactModel:
         """
         if target_date is None:
             target_date = date(2026, 9, 15)  # Corridor default planning date
+        elif isinstance(target_date, str):
+            try:
+                target_date = date.fromisoformat(target_date)
+            except Exception:
+                target_date = date(2026, 9, 15)
 
         # 1. Query passenger traffic windows for this section
         traffic_windows = (

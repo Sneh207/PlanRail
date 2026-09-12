@@ -42,3 +42,39 @@ def get_block(block_id: str, db: Session = Depends(get_db)):
             detail={"code": "RESOURCE_NOT_FOUND", "message": f"Optimized Block '{block_id}' not found"}
         )
     return block
+
+@router.patch(
+    "/blocks/{block_id}/status",
+    response_model=OptimizedBlockResponse,
+    summary="Update Block Status (Approve/Reject/Modify)",
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse}
+    }
+)
+def update_block_status(
+    block_id: str,
+    payload: dict,
+    db: Session = Depends(get_db)
+):
+    new_status = payload.get("status")
+    if not new_status:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "MISSING_STATUS", "message": "Field 'status' is required"}
+        )
+    try:
+        updated = BlockService.update_block_status(db, block_id, new_status)
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "RESOURCE_NOT_FOUND", "message": f"Optimized Block '{block_id}' not found"}
+            )
+        return updated
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "INVALID_STATUS", "message": str(val_err)}
+        )
+

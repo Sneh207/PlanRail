@@ -25,7 +25,14 @@ from app.schemas.domain import (
     OptimizedBlockResponse,
     OptimizationGenerateResponse,
     FreightTrainMovementResponse,
+    MaintenanceStatusUpdateRequest,
+    EmergencyMaintenanceCreateRequest,
+    BlockStatusUpdateRequest,
+    AdminConfigResponse,
+    AdminConfigUpdateRequest,
+    ActionRequiredItem,
 )
+
 
 __all__ = [
     "ErrorDetail",

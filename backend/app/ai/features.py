@@ -44,27 +44,31 @@ def extract_features(db: Session, request: MaintenanceRequest) -> Dict[str, Any]
       - Derived domain risk ratios
     """
     # 1. Severity extraction & normalization
-    raw_severity = float(request.severity) if request.severity is not None else 5.0
-    # For model (1-10 scale):
-    model_severity = raw_severity if raw_severity <= 10.0 else raw_severity / 10.0
-    model_severity = max(1.0, min(10.0, model_severity))
-    # Normalized [0, 100]
-    severity_norm = clip_scale(model_severity, 1.0, 10.0)
+    raw_severity = float(request.severity) if request.severity is not None else 50.0
+    if raw_severity <= 10.0:
+        model_severity = max(1.0, min(10.0, raw_severity))
+        severity_norm = clip_scale(model_severity, 1.0, 10.0)
+    else:
+        model_severity = max(1.0, min(10.0, raw_severity / 10.0))
+        severity_norm = max(0.0, min(100.0, raw_severity))
 
     # 2. Criticality extraction & normalization
     raw_criticality = (
         float(request.criticality_score)
         if request.criticality_score is not None
-        else 5.0
+        else 50.0
     )
-    model_criticality = raw_criticality if raw_criticality <= 10.0 else raw_criticality / 10.0
-    model_criticality = max(1.0, min(10.0, model_criticality))
-    criticality_norm = clip_scale(model_criticality, 1.0, 10.0)
+    if raw_criticality <= 10.0:
+        model_criticality = max(1.0, min(10.0, raw_criticality))
+        criticality_norm = clip_scale(model_criticality, 1.0, 10.0)
+    else:
+        model_criticality = max(1.0, min(10.0, raw_criticality / 10.0))
+        criticality_norm = max(0.0, min(100.0, raw_criticality))
 
-    # 3. Overdue days extraction & normalization
+    # 3. Overdue days extraction & normalization (0 - 30 days scale)
     raw_overdue_days = int(request.overdue_days) if request.overdue_days is not None else 0
     model_overdue_days = max(0.0, float(raw_overdue_days))
-    overdue_norm = clip_scale(model_overdue_days, 0.0, 60.0)
+    overdue_norm = clip_scale(model_overdue_days, 0.0, 30.0)
 
     # 4. Fetch associated Asset
     asset: Optional[Asset] = None
@@ -112,8 +116,8 @@ def extract_features(db: Session, request: MaintenanceRequest) -> Dict[str, Any]
         else []
     )
     if traffic_windows:
-        avg_trains = sum(float(tw.train_count or 0.0) for tw in traffic_windows) / len(traffic_windows)
-        train_density = max(15.0, min(115.0, avg_trains * 8.0))
+        total_daily_passenger_trains = sum(float(tw.train_count or 0.0) for tw in traffic_windows)
+        train_density = max(15.0, min(115.0, total_daily_passenger_trains * 2.3))
     else:
         train_density = 55.0  # Delhi–Agra corridor mean passenger density
 
